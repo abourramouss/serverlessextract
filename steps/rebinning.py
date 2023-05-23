@@ -15,8 +15,10 @@ class RebinningStep(Step):
 
         cmd = [
             "DP3",
-            f"PARAMETERS/{self.parameter_file}",
             f"msin={mesurement_set}",
             f"msout={output_dir}"
         ]
-        subprocess.run(cmd)
+        result = subprocess.check_output(cmd)
+        
+        print(result)
+    

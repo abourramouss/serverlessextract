@@ -10,16 +10,16 @@ class LithopsDataSource(DataSource):
 
     def download_file(self, storage, bucket, key, write_dir):
         try:
-            response = storage.get_object(bucket, key)
-            file_body = response['Body']
+            file_body = storage.get_object(bucket, key, stream=True)
             local_path = os.path.join(write_dir, key)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
                 while True:
-                    chunk = file_body.read(200000)  # Read 200000 bytes.
+                    chunk = file_body.read(100000000)  # Read 100 mb.
                     if not chunk:
                         break
                     f.write(chunk)
+                    
         except Exception as e:
             print(f"Failed to download file {key}: {e}")
 
@@ -32,6 +32,3 @@ class LithopsDataSource(DataSource):
         for future in as_completed(futures):
             future.result()
         
-
-            
-            
