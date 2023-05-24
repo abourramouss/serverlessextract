@@ -6,9 +6,9 @@ class LithopsExecutor(Executor):
     def __init__(self):
         self.executor = lithops.FunctionExecutor()
 
-    def execute(self, step, mesurement_set_iterdata: List[str], bucket_name: str, output_dir: str):
+    def execute(self, step, iterdata: List[str], extra_args: List[str], extra_env: dict):
     
-        extra_args = [bucket_name, output_dir]
-        futures = self.executor.map(step.run, mesurement_set_iterdata, extra_args=extra_args)
+
+        futures = self.executor.map(step.run, iterdata, extra_args=extra_args, extra_env=extra_env)
         results = self.executor.get_result(futures)
         return results

@@ -7,10 +7,11 @@ class LithopsDataSource(DataSource):
     def __init__(self):
         self.storage = Storage()
 
-
-    def download_file(self, storage, bucket, key, write_dir):
+   
+    
+    def download_file(self, bucket, key, write_dir):
         try:
-            file_body = storage.get_object(bucket, key, stream=True)
+            file_body = self.storage.get_object(bucket, key, stream=True)
             local_path = os.path.join(write_dir, key)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
@@ -27,8 +28,34 @@ class LithopsDataSource(DataSource):
         keys = self.storage.list_keys(bucket, prefix=directory)
         
         with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(self.download_file, self.storage, bucket, key, write_dir) for key in keys]
-
+            futures = [executor.submit(self.download_file, bucket, key, write_dir) for key in keys]
         for future in as_completed(futures):
             future.result()
+    
+
+    def upload_file(self, bucket, directory, abs_file_path, rel_file_path):
+        try:
+
+            key = f"{directory}/{rel_file_path}"
+            with open(abs_file_path, 'rb') as f:
+                self.storage.put_object(bucket, key, f)
+        except Exception as e:
+            print(f"Failed to upload file {rel_file_path}: {e}")
         
+
+    def upload(self, bucket: str, s3_directory: str, local_directory: str) -> None:
+        base_name = os.path.basename(local_directory)
+        files = [(os.path.join(path, filename), os.path.join(base_name, os.path.relpath(os.path.join(path, filename), local_directory)))
+                for path, dirs, files in os.walk(local_directory)
+                for filename in files]
+
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self.upload_file, bucket, s3_directory, file[0], file[1]) for file in files]
+        
+        for future in as_completed(futures):
+            future.result()
+
+
+         
+    
+   
