@@ -95,8 +95,9 @@ class PartitionChecker:
         return is_part_of_original, partitioned_indices
     
 if __name__ == "__main__":
-    checker = PartitionChecker('/mnt/d/SB205.MS/', 'partitions/partition_1.ms')
-    is_part_of_original, partitioned_indices = checker.check_partition()
+    p = Partitioner('/mnt/d/SB205.MS/')
+    partitions = p.partition(100)  # Partition into chunks of 900 seconds
 
-    print(f'Is partition part of original: {is_part_of_original}')
-    print(f'Rows in original set: {partitioned_indices}')
+    for partition in partitions:
+        print(f'Partitioned set at: {partition}')
+        
