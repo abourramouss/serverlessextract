@@ -17,10 +17,9 @@ class RebinningStep(Step):
         #download the mesurement set
         self.datasource.download(bucket_name, mesurement_set, output_dir)
         #download the parameter folder for DP3
-        self.datasource.download(bucket_name, self.parameter_file, output_dir)
-        print(os.listdir('/tmp/extract-data/parameters'))
+        self.datasource.download(bucket_name, f"extract-data/parameters", output_dir)
 
-        
+
         
         os.makedirs('DATAREB', exist_ok=True)
         
@@ -31,11 +30,11 @@ class RebinningStep(Step):
             f"msout=DATAREB/{mesurement_set_name}",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+         
         print(result.stdout)
         print(result.stderr)
 
         #upload for testing purposes
-        self.datasource.upload(bucket_name, 'extract-data/DATAREB', f'/tmp/DATAREB/{mesurement_set_name}')
+        self.datasource.upload(bucket_name, 'extract-data/step1_out', f'/tmp/DATAREB/{mesurement_set_name}')
         
-        return f'extract-data/DATAREB/{mesurement_set_name}'
+        return f'extract-data/step1_out/{mesurement_set_name}'

@@ -14,22 +14,25 @@ if "__main__" == __name__:
     steps = [RebinningStep('extract-data/parameters/STEP1-flagrebin.parset', 'rebinning.lua'), 
              CalibrationStep('extract-data/parameters/STEP2A-calibration.parset',
                              'extract-data/parameters/STEP2A-apparent.skymodel',
-                             'extract-data/parameters/STEP1-apparent.sourced'
+                             'extract-data/parameters/STEP1-apparent.sourcedb'
                              ),
-             
+             SubtractionStep('extract-data/parameters/STEP2B-subtract.parset',
+                             'extract-data/parameters/STEP1-apparent.sourcedb'
+                             ),
             ]
     executor = LithopsExecutor()
-    mesurement_sets = ['extract-data/partition_1.ms','extract-data/partition_2.ms']
+    mesurement_sets = ['extract-data/partitions/partition_1.ms','extract-data/partitions/partition_2.ms', 'extract-data/partitions/partition_3.ms', 'extract-data/partitions/partition_4.ms']
     bucket_name = 'aymanb-serverless-genomics'
     output_dir = '/tmp/'
     extra_env = {"HOME": "/tmp"}
-
-    #Step 1: Flagging and rebinning the data
     extra_args = [bucket_name, output_dir]
+    
+    #Step 1: Flagging and rebinning the data
     calibration_data = executor.execute(steps[0], mesurement_sets, extra_args=extra_args, extra_env=extra_env)
     
     #Step 2a: Calibration solutions computation
-    extra_args = [bucket_name, output_dir]
-    executor.execute(steps[1], calibration_data, extra_args=extra_args, extra_env=extra_env)
+    substraction_data = executor.execute(steps[1], calibration_data, extra_args=extra_args, extra_env=extra_env)
     
+    #Step 2b: Subtracting strong sources
+    executor.execute(steps[2], calibration_data, extra_args=extra_args, extra_env=extra_env)
 
