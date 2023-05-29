@@ -3,9 +3,9 @@ from .step import Step
 from datasource import LithopsDataSource
 import os
 class CalibrationStep(Step):
-    def __init__(self, calibration_file, skymodel_file, sourcerd_file):
+    def __init__(self, calibration_file, skymodel_file, sourcedb_file):
         self.skymodel_file = skymodel_file
-        self.sourcerd_file = sourcerd_file
+        self.sourcedb_file = sourcedb_file
         self.calibration_file = calibration_file
         
     def run(self, calibrated_mesurement_set: str, bucket_name: str, output_dir: str) -> None:
@@ -14,66 +14,106 @@ class CalibrationStep(Step):
         
         os.chdir(output_dir)
         #Download rebined mesurement set
+        calibrated_name = calibrated_mesurement_set.split('/')[-1]
+        calibrated_name = calibrated_name.split('.')[0]
+        output_h5 = f"{calibrated_name}.h5"
         self.datasource.download(bucket_name, calibrated_mesurement_set, output_dir)
        
-        #Download parameters folder
-        self.datasource.download(bucket_name, self.skymodel_file, output_dir)
+        #Download the parameter folder for DP3
+        self.datasource.download(bucket_name, f"extract-data/parameters", output_dir)
         
+        os.makedirs('DATAREB', exist_ok=True)
+            
         cmd = [
                 "DP3",
                 self.calibration_file,
                 f"msin={calibrated_mesurement_set}",
-                f"sub.applycal.parmdb=output/{calibrated_mesurement_set}.h5",
-                f"sub.sourcedb={self.skymodel_file}"
+                f"cal.h5parm=DATAREB/{output_h5}",
+                f"sub.sourcedb={self.sourcedb_file}"
             ]
         
         
-        
-        out = subprocess.run(cmd,  capture_output=True, text=True)
-        
+        print(cmd)
+                
+        out = subprocess.run(cmd, capture_output=True, text=True)
         print(out.stdout)
         print(out.stderr)
+        
+        self.datasource.storage.upload_file(f'/tmp/DATAREB/{output_h5}', bucket_name, f'extract-data/step2a_out/{output_h5}')
+
+        return f'extract-data/step2a_out/{output_h5}'
     
 
     
 
 class SubtractionStep(Step):
-    def __init__(self, input_files, h5_files, skymodel_file, calibration_file):
-        self.input_files = input_files
-        self.h5_files = h5_files
-        self.skymodel_file = skymodel_file
+    def __init__(self, calibration_file, sourcedb_file):
+        
         self.calibration_file = calibration_file
+        self.source_db = sourcedb_file
 
-    def run(self):
-        for input_file, h5_file in zip(self.input_files, self.h5_files):
-            cmd = [
-                "DP3",
-                self.calibration_file,
-                f"msin={input_file}",
-                f"sub.applycal.parmdb={h5_file}",
-                f"sub.sourcedb={self.skymodel_file}"
-            ]
-            subprocess.run(cmd)
+    def run(self, calibrated_mesurement_set: str, bucket_name: str, output_dir: str):
+        
+        self.datasource = LithopsDataSource()
+        os.chdir(output_dir)
 
-    def get_data(self):
-        return list(zip(self.input_files, self.h5_files))
+        calibrated_name = calibrated_mesurement_set.split('/')[-1]
+        calibrated_name = calibrated_name.split('.')[0]
+        output_h5 = f"{calibrated_name}.h5"
+        
+        self.datasource.download(bucket_name, calibrated_mesurement_set, output_dir)
+        self.datasource.download(bucket_name, f"extract-data/parameters", output_dir)
+        
+        self.datasource.storage.download_file(bucket_name, f'extract-data/step2a_out/{output_h5}', f'/tmp/DATAREB/{output_h5}')
+        
+        cmd = [
+            "DP3",
+            self.calibration_file,
+            f"msin={calibrated_mesurement_set}",
+            f"sub.applycal.parmdb=DATAREB/{output_h5}",
+            f"sub.sourcedb={self.source_db}"
+        ]
+        
+        print(cmd)
+        out = subprocess.run(cmd, capture_output=True, text=True)
+
+        print(out.stdout)
+        print(out.stderr)
+
+        self.datasource.upload(bucket_name, 'extract-data/step2b_out', f'/tmp/{calibrated_mesurement_set}')
+        print(calibrated_mesurement_set)
+        
 
 
 class ApplyCalibrationStep(Step):
-    def __init__(self, input_files, h5_files, applycal_file):
-        self.input_files = input_files
-        self.h5_files = h5_files
-        self.applycal_file = applycal_file
+    def __init__(self, calibration_file, sourcedb_file):
+        
+        self.calibration_file = calibration_file
+        self.source_db = sourcedb_file
 
-    def run(self):
-        for input_file, h5_file in zip(self.input_files, self.h5_files):
-            cmd = [
-                "DP3",
-                self.applycal_file,
-                f"msin={input_file}",
-                f"apply.parmdb={h5_file}"
-            ]
-            subprocess.run(cmd)
+    def run(self, calibrated_mesurement_set: str, bucket_name: str, output_dir: str):
+        
+        self.datasource = LithopsDataSource()
+        os.chdir(output_dir)
 
-    def get_data(self):
-        return list(zip(self.input_files, self.h5_files))
+        calibrated_name = calibrated_mesurement_set.split('/')[-1]
+        calibrated_name = calibrated_name.split('.')[0]
+        output_h5 = f"{calibrated_name}.h5"
+        
+        self.datasource.download(bucket_name, calibrated_mesurement_set, output_dir)
+        self.datasource.download(bucket_name, f"extract-data/parameters", output_dir)
+        
+        self.datasource.storage.download_file(bucket_name, f'extract-data/step2a_out/{output_h5}', f'/tmp/DATAREB/{output_h5}')
+        
+        cmd = [
+            "DP3",
+            self.calibration_file,
+            f"msin={calibrated_mesurement_set}",
+            f"apply.parmdb=DATAREB/{output_h5}"
+        ]
+        
+        print(cmd)
+        out = subprocess.run(cmd, capture_output=True, text=True)
+
+        print(out.stdout)
+        print(out.stderr)
