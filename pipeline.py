@@ -6,6 +6,7 @@ from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubtractionStep, ApplyCalibrationStep
 from steps.imaging import ImagingStep
 from datasource import LithopsDataSource
+import time
 
 
 if "__main__" == __name__:
@@ -26,10 +27,11 @@ if "__main__" == __name__:
     output_dir = '/tmp/'
     extra_env = {"HOME": "/tmp"}
     extra_args = [bucket_name, output_dir]
-    
+    datasource = LithopsDataSource()
+  
     #Step 1: Flagging and rebinning the data
     calibration_data = executor.execute(steps[0], mesurement_sets, extra_args=extra_args, extra_env=extra_env)
-    
+
     #Step 2a: Calibration solutions computation
     substraction_data = executor.execute(steps[1], calibration_data, extra_args=extra_args, extra_env=extra_env)
     

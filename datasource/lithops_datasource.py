@@ -56,6 +56,11 @@ class LithopsDataSource(DataSource):
             future.result()
 
 
-         
+    def get_ms_size(self, bucket_name, directory):
+        objects = self.storage.list_objects(bucket_name, prefix=directory)
+
+        total_size = sum(obj['Size'] for obj in objects)
+
+        return total_size
     
    
