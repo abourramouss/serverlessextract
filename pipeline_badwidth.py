@@ -16,10 +16,10 @@ if "__main__" == __name__:
     steps = [RebinningStep('extract-data/parameters/STEP1-flagrebin.parset', 'rebinning.lua'), 
              CalibrationStep('extract-data/parameters/STEP2A-calibration.parset',
                              'extract-data/parameters/STEP2A-apparent.skymodel',
-                             'extract-data/parameters/STEP1-apparent.sourcedb'
+                             'extract-data/parameters/apparent.sourcedb'
                              ),
              SubtractionStep('extract-data/parameters/STEP2B-subtract.parset',
-                             'extract-data/parameters/STEP1-apparent.sourcedb'
+                             'extract-data/parameters/apparent.sourcedb'
                              ),
             ]
     executor = LithopsExecutor()
