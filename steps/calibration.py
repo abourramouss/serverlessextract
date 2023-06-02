@@ -21,6 +21,12 @@ class CalibrationStep(Step):
        
         #Download the parameter folder for DP3
         self.datasource.download(bucket_name, f"extract-data/parameters", output_dir)
+        curr_dir = os.getcwd()
+        os.chdir(f'extract-data/parameters')
+        for file in os.listdir():
+            print(file)
+        
+        os.chdir(curr_dir)
         
         os.makedirs('DATAREB', exist_ok=True)
             
@@ -29,7 +35,7 @@ class CalibrationStep(Step):
                 self.calibration_file,
                 f"msin={calibrated_mesurement_set}",
                 f"cal.h5parm=DATAREB/{output_h5}",
-                f"sub.sourcedb={self.sourcedb_file}"
+                f"cal.sourcedb={self.sourcedb_file}"
             ]
         
         
@@ -66,30 +72,31 @@ class SubtractionStep(Step):
         
         self.datasource.storage.download_file(bucket_name, f'extract-data/step2a_out/{output_h5}', f'/tmp/DATAREB/{output_h5}')
         
+        
         cmd = [
             "DP3",
             self.calibration_file,
             f"msin={calibrated_mesurement_set}",
             f"sub.applycal.parmdb=DATAREB/{output_h5}",
-            f"sub.sourcedb={self.source_db}"
+            f"sub.sourcedb={self.source_db}",
         ]
         
-        print(cmd)
+        
         out = subprocess.run(cmd, capture_output=True, text=True)
-
+        
         print(out.stdout)
         print(out.stderr)
 
         self.datasource.upload(bucket_name, 'extract-data/step2b_out', f'/tmp/{calibrated_mesurement_set}')
-        print(calibrated_mesurement_set)
+        
+        return f'extract-data/step2b_out/{calibrated_name}.ms'
         
 
 
 class ApplyCalibrationStep(Step):
-    def __init__(self, calibration_file, sourcedb_file):
+    def __init__(self, calibration_file):
         
         self.calibration_file = calibration_file
-        self.source_db = sourcedb_file
 
     def run(self, calibrated_mesurement_set: str, bucket_name: str, output_dir: str):
         
@@ -105,6 +112,7 @@ class ApplyCalibrationStep(Step):
         
         self.datasource.storage.download_file(bucket_name, f'extract-data/step2a_out/{output_h5}', f'/tmp/DATAREB/{output_h5}')
         
+        print(calibrated_mesurement_set)
         cmd = [
             "DP3",
             self.calibration_file,
@@ -112,8 +120,11 @@ class ApplyCalibrationStep(Step):
             f"apply.parmdb=DATAREB/{output_h5}"
         ]
         
-        print(cmd)
         out = subprocess.run(cmd, capture_output=True, text=True)
-
+        
         print(out.stdout)
         print(out.stderr)
+
+        self.datasource.upload(bucket_name, 'extract-data/step2c_out', f'/tmp/{calibrated_mesurement_set}')
+        
+        return f'extract-data/step2c_out/{calibrated_name}.ms'

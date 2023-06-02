@@ -3,11 +3,18 @@ import os
 from .step import Step
 
 class ImagingStep(Step):
-    def __init__(self, input_files, output_name, params=None):
-        self.input_files = input_files
+    
+    def __init__(self, output_name):
         self.output_name = output_name
-        if params is None:
-            self.params = [
+
+    def run(self, input_files: list, bucket_name: str, output_dir: str):
+        
+        
+        #self.datasource.download(bucket_name, calibrated_mesurement_set, output_dir)
+
+        
+        cmd = [
+                "wsclean",
                 "-size", "1024", "1024",
                 "-pol", "I",
                 "-scale", "5arcmin",
@@ -23,18 +30,13 @@ class ImagingStep(Step):
                 "-weight", "briggs", "0",
                 "-data-column", "CORRECTED_DATA",
                 "-nmiter", "0",
-                "-name", self.output_name
+                "-name", os.path.join(output_dir, self.output_name)
             ]
-        else:
-            self.params = params
-
-    def run(self):
-        cmd = ["wsclean"] + self.params + self.input_files
-        subprocess.run(cmd)
-
-    def get_data(self):
-        # Imaging step doesn't return any data that needs to be passed to another step.
-        # So, return None or an empty list.
-        return None
-    
-    
+        
+        # Append all the input files to the command
+        cmd.extend(input_files)
+        
+        out = subprocess.run(cmd, capture_output=True, text=True)
+        
+        print(out.stdout)
+        print(out.stderr)
