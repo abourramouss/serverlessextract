@@ -12,7 +12,18 @@ import time
 if "__main__" == __name__:
     #Pipeline parameters
     executor = LithopsExecutor()
-    mesurement_sets = ['extract-data/partitions/partition_1.ms','extract-data/partitions/partition_2.ms', 'extract-data/partitions/partition_3.ms', 'extract-data/partitions/partition_4.ms']
+    mesurement_sets = ['extract-data/partitions/partition_1.ms',
+                        'extract-data/partitions/partition_2.ms', 
+                        'extract-data/partitions/partition_3.ms',
+                        'extract-data/partitions/partition_4.ms',
+                        'extract-data/partitions/partition_5.ms', 
+                        'extract-data/partitions/partition_6.ms', 
+                        'extract-data/partitions/partition_7.ms', 
+                        'extract-data/partitions/partition_8.ms', 
+                        'extract-data/partitions/partition_9.ms',
+                        'extract-data/partitions/partition_10.ms',
+                        'extract-data/partitions/partition_11.ms'
+                        ]
     bucket_name = 'aymanb-serverless-genomics'
     output_dir = '/tmp/'
     extra_env = {"HOME": "/tmp"}
@@ -37,7 +48,7 @@ if "__main__" == __name__:
                         'extract-data/parameters/STEP2C-applycal.parset'
                 ),
             ImagingStep(
-                        'extract-data/output/Cygloop-205-210-b0-1024'
+                        'extract-data/output/image',
             )
             ]
     
@@ -58,4 +69,4 @@ if "__main__" == __name__:
     print(calibrated_mss)
     
     #Step 3: Imaging
-    executor.execute(steps[4], substracted_mesurement_sets, extra_args=extra_args, extra_env=extra_env)
+    executor.execute_call_async(steps[4], calibrated_mss, extra_args=extra_args, extra_env=extra_env)
