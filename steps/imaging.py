@@ -39,10 +39,16 @@ class ImagingStep(Step):
         cmd.extend(input_files)
         
         print(cmd)
+        image_dir = os.path.join(output_dir, self.output_name)
+        img_dir = os.path.dirname(image_dir)
+        os.makedirs(img_dir, exist_ok=True)
         out = subprocess.run(cmd, capture_output=True, text=True)
         
-        print(out.stdout)
-        print(out.stderr)
         
-        print(f'Uploading {output_dir}/{self.output_name}.fits')
-        self.datasource.storage.upload_file(f'extract-data/step3_out/{self.output_name}-image.fits', bucket_name ,f'{output_dir}/{self.output_name}.fits')
+        print(f'Uploading image files to {bucket_name}')
+        
+       
+        self.datasource.upload(bucket_name, 'extract-data/step3_out', img_dir)
+
+        
+        

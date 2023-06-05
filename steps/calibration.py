@@ -41,9 +41,8 @@ class CalibrationStep(Step):
         
         print(cmd)
                 
-        out = subprocess.run(cmd, capture_output=True, text=True)
-        print(out.stdout)
-        print(out.stderr)
+        out = subprocess.run(cmd)
+        
         
         self.datasource.storage.upload_file(f'/tmp/DATAREB/{output_h5}', bucket_name, f'extract-data/step2a_out/{output_h5}')
 
@@ -84,8 +83,7 @@ class SubtractionStep(Step):
         
         out = subprocess.run(cmd, capture_output=True, text=True)
         
-        print(out.stdout)
-        print(out.stderr)
+       
 
         self.datasource.upload(bucket_name, 'extract-data/step2b_out', f'/tmp/{calibrated_mesurement_set}')
         
@@ -122,8 +120,6 @@ class ApplyCalibrationStep(Step):
         
         out = subprocess.run(cmd, capture_output=True, text=True)
         
-        print(out.stdout)
-        print(out.stderr)
 
         self.datasource.upload(bucket_name, 'extract-data/step2c_out', f'/tmp/{calibrated_mesurement_set}')
         
