@@ -29,10 +29,9 @@ class RebinningStep(Step):
             f"msin={mesurement_set}",
             f"msout=DATAREB/{mesurement_set_name}",
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        out = subprocess.run(cmd, capture_output=True, text=True)
          
-        print(result.stdout)
-        print(result.stderr)
+        
 
         #upload for testing purposes
         self.datasource.upload(bucket_name, 'extract-data/step1_out', f'/tmp/DATAREB/{mesurement_set_name}')
