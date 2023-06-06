@@ -23,7 +23,7 @@ if "__main__" == __name__:
     # Filter keys that include '.ms' in the directory name
     measurement_sets = [key for key in all_keys if '.ms' in key]
     measurement_sets = list(set('/'.join(key.split('/')[:3]) for key in measurement_sets))
-
+    
     step_names = ['Rebinning', 'Calibration', 'Subtraction', 'Apply Calibration', 'Imaging']
     bandwidths = []
 
@@ -111,6 +111,7 @@ if "__main__" == __name__:
     end_time = time.time()
     
     time_taken = end_time - start_time # in seconds
+    
     bandwidth = total_data_size / time_taken # MB/s
     bandwidths.append(bandwidth)
     print(f"Step 3 Bandwidth: {bandwidth} MB/s")

@@ -10,7 +10,7 @@ class Partitioner:
     def __init__(self, input_set):
         self.input_set = input_set
 
-    def partition(self, duration):
+    def partition_duration(self, duration):
         t = table(self.input_set, readonly=False)
         t = t.sort("TIME")  # Sort the table based on the time column
         num_rows = len(t)
@@ -53,23 +53,6 @@ class Partitioner:
 
         return partitions
     
-    def check_partition(self):
-        original_t = table(self.original_set, readonly=True)
-        partitioned_t = table(self.partitioned_set, readonly=True)
-
-        original_times = original_t.getcol("TIME")
-        partitioned_times = partitioned_t.getcol("TIME")
-
-        # Check if all times in partitioned set are in the original set
-        is_part_of_original = np.all(np.isin(partitioned_times, original_times))
-
-        # Get the row indices of the partitioned set in the original set
-        partitioned_indices = np.where(np.isin(original_times, partitioned_times))[0]
-
-        original_t.close()
-        partitioned_t.close()
-
-        return is_part_of_original, partitioned_indices
 
 class PartitionChecker:
     def __init__(self, original_set, partitioned_set):
@@ -96,7 +79,7 @@ class PartitionChecker:
     
 if __name__ == "__main__":
     p = Partitioner('/mnt/d/SB205.MS/')
-    partitions = p.partition(100)  # Partition into chunks of 900 seconds
+    partitions = p.partition(100) 
 
     for partition in partitions:
         print(f'Partitioned set at: {partition}')
