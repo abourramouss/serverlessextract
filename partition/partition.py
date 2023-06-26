@@ -79,7 +79,7 @@ class PartitionChecker:
     
 if __name__ == "__main__":
     p = Partitioner('/mnt/d/SB205.MS/')
-    partitions = p.partition(100) 
+    partitions = p.partition_duration(100) 
 
     for partition in partitions:
         print(f'Partitioned set at: {partition}')
