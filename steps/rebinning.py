@@ -4,7 +4,6 @@ from datasource import LithopsDataSource
 from datasource import DataSource
 import os
 from utils import delete_all_in_cwd
-import time
 
 
 class RebinningStep(Step):
@@ -20,11 +19,16 @@ class RebinningStep(Step):
 
         mesurement_set_name = mesurement_set.split('/')[-1]
         output_path = f"/tmp/DATAREB/cal_{mesurement_set_name}"
+
         # First download the measurement set and the parameters needed
-        self.datasource.download(bucket_name, mesurement_set, output_dir)
-        self.datasource.download(
+        download_timing_1 = self.datasource.download(
+            bucket_name, mesurement_set, output_dir)
+        download_timing_2 = self.datasource.download(
             bucket_name, f"extract-data/parameters", output_dir)
 
+        print("Download timing")
+        print(download_timing_1)
+        print(download_timing_2)
         cmd = [
             "DP3",
             self.parameter_file,
@@ -32,6 +36,6 @@ class RebinningStep(Step):
             f"msout={output_path}",
         ]
 
-        out = subprocess.run(cmd, capture_output=True, text=True)
+        timing = self.execute_command(cmd, capture=False)
 
-        return output_path
+        return {'result': output_path, 'timing': {'execution': timing, 'io': sum(download_timing_1[1] + download_timing_2[1])}}
