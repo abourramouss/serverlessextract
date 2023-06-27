@@ -36,10 +36,8 @@ class CalibrationStep(Step):
             f"cal.sourcedb={self.sourcedb_file}"
         ]
 
-        # Execution operation
-        out = subprocess.run(cmd, capture_output=True, text=True)
-
-        return calibrated_mesurement_set
+        timing = self.execute_command(cmd, capture=False)
+        return {'result': calibrated_mesurement_set, 'timing': {'execution': timing}}
 
 
 class SubtractionStep(Step):
@@ -64,8 +62,8 @@ class SubtractionStep(Step):
             f"sub.sourcedb={self.source_db}",
         ]
 
-        out = subprocess.run(cmd, capture_output=True, text=True)
-        return calibrated_mesurement_set
+        timing = self.execute_command(cmd, capture=False)
+        return {'result': calibrated_mesurement_set, 'timing': {'execution': timing}}
 
 
 class ApplyCalibrationStep(Step):
@@ -90,10 +88,8 @@ class ApplyCalibrationStep(Step):
 
         print(cmd)
 
-        out = subprocess.run(cmd, capture_output=True, text=True)
-        print(out.stdout)
-        print(out.stderr)
-        self.datasource.upload(
-            bucket_name, 'extract-data/step2c_out', f'/tmp/{calibrated_mesurement_set}')
+        time = self.execute_command(cmd, capture=False)
+        _, upload_timing = self.datasource.upload(
+            bucket_name, 'extract-data/step2c_out', calibrated_mesurement_set)
 
-        return f'extract-data/step2c_out/{calibrated_name}.ms'
+        return {'result': f'extract-data/step2c_out/{calibrated_name}.ms', 'timing': {'execution': time, 'upload': upload_timing}}

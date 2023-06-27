@@ -24,8 +24,7 @@ if "__main__" == __name__:
     measurement_sets = [key for key in all_keys if '.ms' in key]
     measurement_sets = list(
         set('/'.join(key.split('/')[:3]) for key in measurement_sets))
-    print(measurement_sets)
-    steps = [
+    map = [
         RebinningStep(
             'extract-data/parameters/STEP1-flagrebin.parset',
             'rebinning.lua'
@@ -39,12 +38,25 @@ if "__main__" == __name__:
             'extract-data/parameters/STEP2B-subtract.parset',
             'extract-data/parameters/apparent.sourcedb'
         ),
+        ApplyCalibrationStep(
+            'extract-data/parameters/STEP2C-applycal.parset'
+        )
 
     ]
 
-    # Step 1: Flagging and rebinning the data
-    calibration_data = executor.execute_steps(
-        steps, measurement_sets, extra_args=extra_args, extra_env=extra_env)
+    reduce = ImagingStep(
+        'extract-data/output/image',
+    )
+    # Execute all the steps that can be executed in parallel in a single worker. Reduce Phase.
+    results_and_timings = executor.execute_steps(
+        map, measurement_sets, extra_args=extra_args, extra_env=extra_env)
+
+    for result_and_timing in results_and_timings:
+        print(f"Result: {result_and_timing['result']}")
+        print(f"Timings: {result_and_timing['timing']}")
+
+    # Imaging step: Reduce Phase
+    # executor.execute_call_async(reduce, calibrated_ms, extra_args=extra_args, extra_env=extra_env)
 
     # Step 2a: Calibration solutions computation
     # substraction_data = executor.execute(steps[1], calibration_data, extra_args=extra_args, extra_env=extra_env)
