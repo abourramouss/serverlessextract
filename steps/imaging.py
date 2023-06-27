@@ -16,9 +16,10 @@ class ImagingStep(Step):
 
         os.chdir(output_dir)
 
+        download_time = 0
         # Download operation (I/O)
         for calibrated_mesurement_set in input_files:
-            self.datasource.download(
+            download_time = download_time + self.datasource.download(
                 bucket_name, calibrated_mesurement_set, output_dir)
 
         cmd = [
@@ -49,6 +50,9 @@ class ImagingStep(Step):
         img_dir = os.path.dirname(image_dir)
         os.makedirs(img_dir, exist_ok=True)
 
-        out = subprocess.run(cmd, capture_output=True, text=True)
+        time = self.execute_command(cmd)
 
-        self.datasource.upload(bucket_name, 'extract-data/step3_out', img_dir)
+        _, upload_timing = self.datasource.upload(
+            bucket_name, 'extract-data/step3_out', img_dir)
+
+        return {'result': image_dir, 'timing': {'execution': time, 'io': download_time + upload_timing}}
