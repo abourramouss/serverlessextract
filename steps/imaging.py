@@ -17,10 +17,13 @@ class ImagingStep(Step):
         os.chdir(output_dir)
 
         download_time = 0
+        download_size = 0
         # Download operation (I/O)
         for calibrated_mesurement_set in input_files:
-            download_time = download_time + self.datasource.download(
-                bucket_name, calibrated_mesurement_set, output_dir)
+            print(f"Downloading {calibrated_mesurement_set}")
+            download_time = download_time = self.datasource.download(
+                bucket_name, calibrated_mesurement_set, output_dir)[1]
+            download_size += self.get_size(calibrated_mesurement_set)
 
         cmd = [
             "wsclean",
@@ -55,4 +58,4 @@ class ImagingStep(Step):
         _, upload_timing = self.datasource.upload(
             bucket_name, 'extract-data/step3_out', img_dir)
 
-        return {'result': image_dir, 'timing': {'execution': time, 'io': download_time + upload_timing}}
+        return {'result': image_dir, 'timing': {'execution': time, 'io': download_time + upload_timing}, 'upload_size': self.get_size(image_dir), 'download_size': download_size}

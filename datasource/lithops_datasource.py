@@ -17,7 +17,7 @@ class LithopsDataSource(DataSource):
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
                 while True:
-                    chunk = file_body.read(100000000)  # Read 100 mb.
+                    chunk = file_body.read(20000000)  # 5mb seems to be optimal
                     if not chunk:
                         break
                     f.write(chunk)
@@ -28,8 +28,8 @@ class LithopsDataSource(DataSource):
     @timeit_io
     def download(self, bucket: str, directory: str, write_dir: str) -> None:
         keys = self.storage.list_keys(bucket, prefix=directory)
-
-        with ThreadPoolExecutor() as executor:
+        print(f"Threads used for download: {os.cpu_count()}")
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             futures = [executor.submit(
                 self.download_file, bucket, key, write_dir) for key in keys]
         for future in as_completed(futures):
@@ -51,8 +51,8 @@ class LithopsDataSource(DataSource):
         files = [(os.path.join(path, filename), os.path.join(base_name, os.path.relpath(os.path.join(path, filename), local_directory)))
                  for path, dirs, files in os.walk(local_directory)
                  for filename in files]
-
-        with ThreadPoolExecutor() as executor:
+        print(f"Threads used for upload: {os.cpu_count()}")
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             futures = [executor.submit(
                 self.upload_file, bucket, s3_directory, file[0], file[1]) for file in files]
 

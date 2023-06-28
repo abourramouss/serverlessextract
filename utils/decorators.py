@@ -1,47 +1,30 @@
 from functools import wraps
 import time
 
-
-class Timer:
-    def __init__(self):
-        self.start = None
-        self.end = None
-        self.data = []
-
-    def __enter__(self):
-        self.start = time.time()
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.end = time.time()
-        elapsed_time = self.end - self.start if self.end and self.start else None
-        self.data.append(elapsed_time)
-
-    @property
-    def elapsed(self):
-        return self.end - self.start if self.end and self.start else None
+# Wrapper that wraps around a function and returns the time it took to execute the function (Mainly used for I/O operations)
 
 
+# Wrapper that wraps around a function and returns the time it took to execute the function (Mainly used for I/O operations)
 def timeit_io(method):
     @wraps(method)
     def timed(*args, **kw):
-        timer = Timer()
-        with timer:
-            result = method(*args, **kw)
-        return result, timer.data
+        start_time = time.time()
+        method(*args, **kw)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        return elapsed_time
     return timed
+
+# Wrapper that wraps around a function and returns the time it took to execute the function (Mainly used for execution time)
 
 
 def timeit_execution(method):
     @wraps(method)
     def timed(*args, **kw):
-        ts = time.time()
-        result = method(*args, **kw)
-        te = time.time()
-        if 'log_time' in kw:
-            name = kw.get('log_name', method.__name__.upper())
-            kw['log_time'][name] = te - ts
-        else:
-            print(f"{method.__name__}  {(te - ts)} seconds")
-        return te - ts
+        start_time = time.time()
+        method(*args, **kw)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"{method.__name__}  {elapsed_time} seconds")
+        return elapsed_time
     return timed
