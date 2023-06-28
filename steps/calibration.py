@@ -92,4 +92,4 @@ class ApplyCalibrationStep(Step):
         upload_timing = self.datasource.upload(
             bucket_name, 'extract-data/step2c_out', calibrated_mesurement_set)
 
-        return {'result': f'extract-data/step2c_out/{calibrated_name}.ms', 'stats': {'execution': time, 'upload': upload_timing, 'upload_size': self.get_size(calibrated_mesurement_set)}}
+        return {'result': f'extract-data/step2c_out/{calibrated_name}.ms', 'stats': {'execution': time, 'upload_time': upload_timing, 'upload_size': self.get_size(calibrated_mesurement_set)}}
