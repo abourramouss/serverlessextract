@@ -79,17 +79,16 @@ if "__main__" == __name__:
                 {"worker": i, "step": step_name, "time": step_data.get('execution', 0)})
 
             if 'download_time' in step_data:
-                io_times.append({"worker": i, "step": step_name,
+                io_times.append({"worker": i, "step": f"{step_name}_download",
                                 "time": step_data['download_time']})
-                io_sizes.append({"worker": i, "step": step_name,
+                io_sizes.append({"worker": i, "step": f"{step_name}_download",
                                 "size": step_data['download_size']})
 
             if 'upload_time' in step_data:
-                io_times.append({"worker": i, "step": step_name,
+                io_times.append({"worker": i, "step": f"{step_name}_upload",
                                 "time": step_data['upload_time']})
-                io_sizes.append({"worker": i, "step": step_name,
+                io_sizes.append({"worker": i, "step": f"{step_name}_upload",
                                 "size": step_data['upload_size']})
-
     execution_times_df = pd.DataFrame(execution_times)
     io_times_df = pd.DataFrame(io_times)
     io_sizes_df = pd.DataFrame(io_sizes)
