@@ -37,4 +37,4 @@ class RebinningStep(Step):
 
         timing = self.execute_command(cmd, capture=False)
 
-        return {'result': output_path, 'stats': {'execution': timing, 'download': download_timing_1 + download_timing_2, 'download size': self.get_size(measurement_set)}}
+        return {'result': output_path, 'stats': {'execution': timing, 'download_time': download_timing_1 + download_timing_2, 'download_size': self.get_size(measurement_set)}}

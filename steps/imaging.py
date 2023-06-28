@@ -2,6 +2,7 @@ import subprocess
 import os
 from .step import Step
 from datasource import LithopsDataSource
+
 import time
 
 
@@ -21,8 +22,8 @@ class ImagingStep(Step):
         # Download operation (I/O)
         for calibrated_mesurement_set in input_files:
             print(f"Downloading {calibrated_mesurement_set}")
-            download_time = download_time = self.datasource.download(
-                bucket_name, calibrated_mesurement_set, output_dir)[1]
+            download_time = download_time + self.datasource.download(
+                bucket_name, calibrated_mesurement_set, output_dir)
             download_size += self.get_size(calibrated_mesurement_set)
 
         cmd = [
@@ -55,7 +56,7 @@ class ImagingStep(Step):
 
         time = self.execute_command(cmd)
 
-        _, upload_timing = self.datasource.upload(
+        upload_time = self.datasource.upload(
             bucket_name, 'extract-data/step3_out', img_dir)
 
-        return {'result': image_dir, 'timing': {'execution': time, 'io': download_time + upload_timing}, 'upload_size': self.get_size(image_dir), 'download_size': download_size}
+        return {'result': image_dir, 'stats': {'execution': time, 'download_time': download_time, 'download_size': download_size, 'upload_time': upload_time, 'upload_size': self.get_size(img_dir)}}

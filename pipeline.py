@@ -7,6 +7,8 @@ from steps.calibration import CalibrationStep, SubtractionStep, ApplyCalibration
 from steps.imaging import ImagingStep
 from datasource import LithopsDataSource
 import time
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
 if "__main__" == __name__:
@@ -53,14 +55,61 @@ if "__main__" == __name__:
 
     #
     calibrated_ms = []
+    stats_list = []
     for result_and_timing in results_and_timings:
         print(f"Result: {result_and_timing['result']}")
         print(f"Stats: {result_and_timing['stats']}")
         calibrated_ms.append(result_and_timing['result'])
+        stats_list.append(result_and_timing['stats'])
 
-    # print(f"Calibrated MS: {calibrated_ms}")
+    print(f"Calibrated MS: {calibrated_ms}")
     # Imaging step: Reduce Phase
-    # imaging_stats = executor.execute_call_async(
-        # reduce, calibrated_ms, extra_args=extra_args, extra_env=extra_env)
+    imaging_stats = executor.execute_call_async(
+        reduce, calibrated_ms, extra_args=extra_args, extra_env=extra_env)
 
-    # print(f"Imaging Stats: {imaging_stats}")
+    print(f"Imaging Stats: {imaging_stats}")
+
+    execution_times = []
+    io_times = []
+    io_sizes = []
+
+    for i, stats in enumerate(stats_list):
+        for step_name, step_data in stats.items():
+            execution_times.append(
+                {"worker": i, "step": step_name, "time": step_data.get('execution', 0)})
+
+            if 'download_time' in step_data:
+                io_times.append({"worker": i, "step": step_name,
+                                "time": step_data['download_time']})
+                io_sizes.append({"worker": i, "step": step_name,
+                                "size": step_data['download_size']})
+
+            if 'upload_time' in step_data:
+                io_times.append({"worker": i, "step": step_name,
+                                "time": step_data['upload_time']})
+                io_sizes.append({"worker": i, "step": step_name,
+                                "size": step_data['upload_size']})
+
+    execution_times_df = pd.DataFrame(execution_times)
+    io_times_df = pd.DataFrame(io_times)
+    io_sizes_df = pd.DataFrame(io_sizes)
+
+    fig, axes = plt.subplots(3, 1, figsize=(10, 15))
+
+    execution_times_df.pivot(index='worker', columns='step',
+                             values='time').plot(kind='bar', ax=axes[0])
+    axes[0].set_title('Execution Times')
+    axes[0].set_ylabel('Time (s)')
+
+    io_times_df.pivot(index='worker', columns='step',
+                      values='time').plot(kind='bar', ax=axes[1])
+    axes[1].set_title('I/O Times')
+    axes[1].set_ylabel('Time (s)')
+
+    io_sizes_df.pivot(index='worker', columns='step',
+                      values='size').plot(kind='bar', ax=axes[2])
+    axes[2].set_title('I/O Sizes')
+    axes[2].set_ylabel('Size (MB)')
+
+    plt.tight_layout()
+    plt.savefig('worker_stats.png')
