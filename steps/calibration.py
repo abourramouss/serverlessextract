@@ -37,7 +37,7 @@ class CalibrationStep(Step):
         ]
 
         timing = self.execute_command(cmd, capture=False)
-        return {'result': calibrated_mesurement_set, 'timing': {'execution': timing}}
+        return {'result': calibrated_mesurement_set, 'stats': {'execution': timing}}
 
 
 class SubtractionStep(Step):
@@ -63,7 +63,7 @@ class SubtractionStep(Step):
         ]
 
         timing = self.execute_command(cmd, capture=False)
-        return {'result': calibrated_mesurement_set, 'timing': {'execution': timing}}
+        return {'result': calibrated_mesurement_set, 'stats': {'execution': timing}}
 
 
 class ApplyCalibrationStep(Step):
@@ -89,7 +89,7 @@ class ApplyCalibrationStep(Step):
         print(cmd)
 
         time = self.execute_command(cmd, capture=False)
-        _, upload_timing = self.datasource.upload(
+        upload_timing = self.datasource.upload(
             bucket_name, 'extract-data/step2c_out', calibrated_mesurement_set)
 
-        return {'result': f'extract-data/step2c_out/{calibrated_name}.ms', 'timing': {'execution': time, 'upload': upload_timing}}
+        return {'result': f'extract-data/step2c_out/{calibrated_name}.ms', 'stats': {'execution': time, 'upload': upload_timing, 'upload_size': self.get_size(calibrated_mesurement_set)}}
