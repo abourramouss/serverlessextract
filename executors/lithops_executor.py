@@ -3,6 +3,7 @@ from .executor import Executor
 from datasource import DataSource
 from typing import List
 from steps.step import Step
+import datetime
 
 
 class LithopsExecutor(Executor):
@@ -29,8 +30,25 @@ class LithopsExecutor(Executor):
 
         futures = self.executor.map(
             execute_step, iterdata, extra_env=extra_env)
-        results_and_stats = self.executor.get_result(
-            futures)
+        results_and_stats = self.executor.get_result(fs=futures)
+        # Assume futures is a list of the future objects
+        futures_stats = [{'future': f, 'stats': f.stats} for f in futures]
+
+        # Sort the futures_stats list based on 'worker_start_tstamp'
+        futures_stats.sort(key=lambda x: x['stats']['worker_start_tstamp'])
+
+        # The start time of the first worker
+        first_worker_start_time = futures_stats[0]['stats']['worker_start_tstamp']
+
+        # Calculate relative start times and update each dictionary in futures_stats
+        for worker_stat in futures_stats:
+            worker_start_time = worker_stat['stats']['worker_start_tstamp']
+            relative_start_time = worker_start_time - first_worker_start_time
+            worker_stat['relative_start_time'] = relative_start_time
+
+            print(
+                f"The relative start time for this worker is {relative_start_time} seconds.")
+
         return results_and_stats
 
     def execute_call_async(self, step, iterdata: List[str], extra_args: List[str], extra_env: dict):
