@@ -1,55 +1,30 @@
 import os
-import multiprocessing
 from lithops import Storage
-
-import os
-import time
-import multiprocessing
-from lithops import Storage
+from multiprocessing import Pool
 
 
-def upload_file_to_s3(local_file, bucket, s3_key, progress_dict):
+def upload_file(file_info):
+    local_file, bucket, s3_key = file_info
     storage = Storage()
     try:
-        print(f'Starting upload for {local_file} to {bucket}/{s3_key}...')
-        storage.upload_file(local_file, bucket, s3_key)
-        progress_dict[local_file] = 'Finished'
+        print(f"Uploading {local_file} to {bucket}/{s3_key}...")
+        storage.upload_file(local_file, bucket, key=s3_key)
+        print(f"Upload finished for {local_file}")
     except Exception as e:
-        progress_dict[local_file] = 'Failed'
-        print(f'Failed to upload {local_file}. Reason: {str(e)}')
+        print(f"An exception occurred: {e}")
 
 
-def print_progress(progress_dict):
-    while True:
-        time.sleep(1)
-        print(dict(progress_dict))
-
-
-def upload_directory_to_s3_parallel(local_directory, bucket, s3_directory):
-    files_to_upload = []
+def upload_directory_to_s3(local_directory, bucket, s3_prefix):
+    file_list = []
     for root, dirs, files in os.walk(local_directory):
         for file in files:
-            local_file = os.path.join(root, file)
-            relative_path = os.path.relpath(local_file, local_directory)
-            s3_key = os.path.join(s3_directory, relative_path)
-            files_to_upload.append((local_file, bucket, s3_key))
+            local_file_path = os.path.join(root, file)
+            s3_key = os.path.join(
+                s3_prefix, os.path.relpath(local_file_path, local_directory)
+            )
+            file_list.append((local_file_path, bucket, s3_key))
 
-    manager = multiprocessing.Manager()
-    progress_dict = manager.dict()
-
-    progress_process = multiprocessing.Process(
-        target=print_progress, args=(progress_dict,))
-    progress_process.start()
-
-    with multiprocessing.Pool() as pool:
-        results = [pool.apply_async(
-            upload_file_to_s3, args + (progress_dict,)) for args in files_to_upload]
-
-    for result in results:
-        result.wait()
-
-    progress_process.terminate()
-    progress_process.join()
-
-    print('Final progress:')
-    print(dict(progress_dict))
+    pool = Pool()
+    pool.map(upload_file, file_list)
+    pool.close()
+    pool.join()
