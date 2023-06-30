@@ -1,3 +1,4 @@
 
 *.pyc
 partition/partitions/
+.vscode/settings.json
