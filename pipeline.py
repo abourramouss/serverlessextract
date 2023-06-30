@@ -108,7 +108,6 @@ if "__main__" == __name__:
     results_and_timings = executor.execute_steps(
         map, measurement_sets, extra_args=extra_args, extra_env=extra_env)
 
-    """
     # Generate list of result and stats
     calibrated_ms = [rt['result'] for rt in results_and_timings]
     stats_list = [rt['stats'] for rt in results_and_timings]
@@ -167,7 +166,7 @@ if "__main__" == __name__:
         plt.savefig(f'{safe_metric}_by_step.png')
 
     # Create figure and axis
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10, 15))  # adjust the size as needed
 
     # Define color for each phase
     colors = {'download_time': 'blue',
@@ -179,9 +178,18 @@ if "__main__" == __name__:
     steps_order = ['RebinningStep', 'CalibrationStep',
                    'SubtractionStep', 'ApplyCalibrationStep']
 
-    # For each worker
+    # Order the results_and_timings and rebin_calib_stats by start_time
+    results_and_timings = sorted(
+        results_and_timings, key=lambda x: x['start_time'])
+    rebin_calib_stats = [rt['stats'] for rt in results_and_timings]
+
+    # Calculate the minimum start time
+    min_start_time = results_and_timings[0]['start_time']
+
+    # Update the Gantt chart code to include start times
     for i, worker in enumerate(rebin_calib_stats):
-        start_time = 0  # Initialize start time
+        # Initialize start time
+        start_time = results_and_timings[i]['start_time'] - min_start_time
         for step in steps_order:
             # Check if the step exists in worker data
             if step in worker:
@@ -213,4 +221,3 @@ if "__main__" == __name__:
     plt.savefig("gantt_chart_steps.png", dpi=300)
     # Save table as CSV
     statistic_df.to_csv('steps_statistics.csv', index=False)
-    """

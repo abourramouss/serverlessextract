@@ -81,6 +81,6 @@ class PartitionChecker:
 
 if __name__ == "__main__":
     p = Partitioner('/mnt/d/SB205.MS/')
-    total_partitions = p.partition_duration(100)
+    total_partitions = p.partition_duration(2000)
 
     print(f'Total partitions created: {total_partitions}')
