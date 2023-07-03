@@ -12,4 +12,3 @@ def delete_all_in_cwd():
                 shutil.rmtree(filename)
         except Exception as e:
             print(f"Failed to delete {filename}. Reason: {e}")
-
