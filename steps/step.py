@@ -6,7 +6,6 @@ from utils import timeit_execution
 
 
 class Step(ABC):
-
     @abstractmethod
     def run(self, measurement_set: str, bucket_name: str, output_dir: str):
         pass
@@ -14,9 +13,12 @@ class Step(ABC):
     @timeit_execution
     def execute_command(self, cmd, capture=False):
         out = subprocess.run(cmd, capture_output=capture, text=capture)
+        if capture:
+            print(out.stdout)
+            print(out.stderr)
         return out
 
-    def get_size(self, start_path='.'):
+    def get_size(self, start_path="."):
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(start_path):
             for f in filenames:
