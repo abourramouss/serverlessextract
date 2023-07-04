@@ -4,6 +4,7 @@ from datasource import LithopsDataSource
 from utils import delete_all_in_cwd
 import os
 import time
+import shutil
 
 
 class CalibrationStep(Step):
@@ -78,13 +79,24 @@ class ApplyCalibrationStep(Step):
             "DP3",
             self.calibration_file,
             f"msin={calibrated_mesurement_set}",
-            f"apply.parmdb=DATAREB/{output_h5}",
+            f"apply.parmdb=/tmp/DATAREB/{output_h5}",
         ]
         print("Apply calibration step")
         time = self.execute_command(cmd, capture=True)
         upload_timing = self.datasource.upload(
             bucket_name, "extract-data/step2c_out", calibrated_mesurement_set
         )
+
+        # Clean up the /tmp/DATAREB directory, since all calibrated measurement sets are uploaded to oss
+
+        for filename in os.listdir("/tmp/DATAREB/"):
+            try:
+                if os.path.isfile(filename) or os.path.islink(filename):
+                    os.unlink(filename)
+                elif os.path.isdir(filename):
+                    shutil.rmtree(filename)
+            except Exception as e:
+                print(f"Failed to delete {filename}. Reason: {e}")
 
         return {
             "result": f"extract-data/step2c_out/{calibrated_name}.ms",
