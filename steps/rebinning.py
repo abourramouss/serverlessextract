@@ -35,7 +35,7 @@ class RebinningStep(Step):
             f"msout={output_path}",
         ]
         print("Rebinning step")
-        timing = self.execute_command(cmd, capture=True)
+        timing = self.execute_command(cmd, capture=False)
         return {
             "result": output_path,
             "stats": {

@@ -7,6 +7,16 @@ import time
 import shutil
 
 
+def remove(path):
+    """param <path> could either be relative or absolute."""
+    if os.path.isfile(path) or os.path.islink(path):
+        os.remove(path)  # remove the file
+    elif os.path.isdir(path):
+        shutil.rmtree(path)  # remove dir and all contains
+    else:
+        raise ValueError("file {} is not a file or dir.".format(path))
+
+
 class CalibrationStep(Step):
     def __init__(self, calibration_file, skymodel_file, sourcedb_file):
         self.skymodel_file = skymodel_file
@@ -33,7 +43,7 @@ class CalibrationStep(Step):
             f"cal.sourcedb={self.sourcedb_file}",
         ]
         print("Calibration step")
-        timing = self.execute_command(cmd, capture=True)
+        timing = self.execute_command(cmd, capture=False)
         return {"result": calibrated_mesurement_set, "stats": {"execution": timing}}
 
 
@@ -59,7 +69,7 @@ class SubtractionStep(Step):
         ]
 
         print("Substraction calibration step")
-        timing = self.execute_command(cmd, capture=True)
+        timing = self.execute_command(cmd, capture=False)
         return {"result": calibrated_mesurement_set, "stats": {"execution": timing}}
 
 
@@ -82,7 +92,7 @@ class ApplyCalibrationStep(Step):
             f"apply.parmdb=/tmp/DATAREB/{output_h5}",
         ]
         print("Apply calibration step")
-        time = self.execute_command(cmd, capture=True)
+        time = self.execute_command(cmd, capture=False)
         upload_timing = self.datasource.upload(
             bucket_name, "extract-data/step2c_out", calibrated_mesurement_set
         )
@@ -90,13 +100,7 @@ class ApplyCalibrationStep(Step):
         # Clean up the /tmp/DATAREB directory, since all calibrated measurement sets are uploaded to oss
 
         for filename in os.listdir("/tmp/DATAREB/"):
-            try:
-                if os.path.isfile(filename) or os.path.islink(filename):
-                    os.unlink(filename)
-                elif os.path.isdir(filename):
-                    shutil.rmtree(filename)
-            except Exception as e:
-                print(f"Failed to delete {filename}. Reason: {e}")
+            remove(os.path.join("/tmp/DATAREB/", filename))
 
         return {
             "result": f"extract-data/step2c_out/{calibrated_name}.ms",
