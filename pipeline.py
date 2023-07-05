@@ -100,7 +100,7 @@ if "__main__" == __name__:
     # Pipeline parameters
     executor = LithopsExecutor()
     bucket_name = "aymanb-serverless-genomics"
-    prefix = "extract-data/partitions_40/"
+    prefix = "extract-data/partitions_50/"
     output_dir = "/tmp/"
     extra_env = {"HOME": "/tmp"}
     extra_args = [bucket_name, output_dir]

@@ -2,8 +2,20 @@ from casacore.tables import table
 import os
 import numpy as np
 from upload import upload_directory_to_s3
+import shutil
 
 
+def remove(path):
+    """param <path> could either be relative or absolute."""
+    if os.path.isfile(path) or os.path.islink(path):
+        os.remove(path)  # remove the file
+    elif os.path.isdir(path):
+        shutil.rmtree(path)  # remove dir and all contains
+    else:
+        raise ValueError("file {} is not a file or dir.".format(path))
+
+
+# Class that takes a measurement set and partitions it into chunks, then uploads them to s3
 class Partitioner:
     def __init__(self, *input_files):
         self.input_files = input_files
@@ -82,7 +94,7 @@ class Partitioner:
 
 
 if __name__ == "__main__":
-    partitions = 40
+    partitions = 50
     p = Partitioner("/home/ayman/Downloads/entire_ms/SB205.MS/")
     total_partitions = p.partition_chunks(partitions)
     print(f"Total partitions created: {total_partitions}")
@@ -92,3 +104,9 @@ if __name__ == "__main__":
         "aymanb-serverless-genomics",
         f"extract-data/partitions_{partitions}",
     )
+
+    # After uploading, delete the contents of the partitions directory
+    dir_partitions = os.listdir("partitions")
+
+    for dir in dir_partitions:
+        remove(f"partitions/{dir}")

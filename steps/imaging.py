@@ -86,7 +86,7 @@ class ImagingStep(Step):
         img_dir = os.path.dirname(image_dir)
         os.makedirs(img_dir, exist_ok=True)
 
-        timing = self.execute_command(cmd, capture=True)
+        timing = self.execute_command(cmd, capture=False)
 
         files = [
             f for f in os.listdir(img_dir) if os.path.isfile(os.path.join(img_dir, f))
