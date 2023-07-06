@@ -29,9 +29,7 @@ class Partitioner:
             num_rows = len(t)
             original_times = np.array(t.getcol("TIME"))
 
-            total_duration = (
-                original_times[-1] - original_times[0]
-            )  # Calculate total duration
+            total_duration = original_times[-1] - original_times[0]  # Calculate total duration
             chunk_duration = total_duration / num_chunks  # Calculate chunk duration
 
             start_time = original_times[0]
@@ -45,16 +43,10 @@ class Partitioner:
                     partition_times = np.array(partition.getcol("TIME"))
 
                     # Check for an exact match in the elements and size between the partition and the slice from the original array
-                    is_exact_subset = np.array_equal(
-                        np.sort(partition_times), np.sort(original_times[start_index:i])
-                    )
-                    print(
-                        f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}"
-                    )
+                    is_exact_subset = np.array_equal(np.sort(partition_times), np.sort(original_times[start_index:i]))
+                    print(f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}")
 
-                    print(
-                        f"Partitioning rows {start_index} to {i} into {partition.nrows()} rows"
-                    )
+                    print(f"Partitioning rows {start_index} to {i} into {partition.nrows()} rows")
                     partition_name = f"partitions/partition_{partition_counter}.ms"
                     partition.copy(partition_name, deep=True)
 
@@ -73,16 +65,10 @@ class Partitioner:
                 partition_times = np.array(partition.getcol("TIME"))
 
                 # Check for an exact match in the elements and size between the partition and the slice from the original array
-                is_exact_subset = np.array_equal(
-                    np.sort(partition_times), np.sort(original_times[start_index:])
-                )
-                print(
-                    f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}"
-                )
+                is_exact_subset = np.array_equal(np.sort(partition_times), np.sort(original_times[start_index:]))
+                print(f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}")
 
-                print(
-                    f"Partitioning rows {start_index} to {num_rows} into {partition.nrows()} rows"
-                )
+                print(f"Partitioning rows {start_index} to {num_rows} into {partition.nrows()} rows")
                 partition_name = f"partitions/partition_{partition_counter}.ms"
                 partition.copy(partition_name, deep=True)
 
@@ -94,7 +80,7 @@ class Partitioner:
 
 
 if __name__ == "__main__":
-    partitions = 50
+    partitions = 70
     p = Partitioner("/home/ayman/Downloads/entire_ms/SB205.MS/")
     total_partitions = p.partition_chunks(partitions)
     print(f"Total partitions created: {total_partitions}")
