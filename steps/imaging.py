@@ -17,7 +17,7 @@ class ImagingStep(Step):
 
         download_time = 0
         download_size = 0
-        # sequential download operation (I/O)
+        # parallel download operation (I/O)
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             download_futures = {
                 executor.submit(
