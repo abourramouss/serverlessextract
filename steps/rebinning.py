@@ -12,7 +12,6 @@ class RebinningStep(Step):
         self.lua_file = lua_file
 
     def run(self, measurement_set: str, bucket_name: str, output_dir: str):
-        self.datasource = LithopsDataSource()
         os.chdir(output_dir)
         os.makedirs("DATAREB", exist_ok=True)
 

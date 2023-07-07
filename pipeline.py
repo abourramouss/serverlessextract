@@ -21,7 +21,9 @@ def generate_stats_df(stats_list, worker_ids):
     execution_times, io_times, io_sizes = [], [], []
     for i, stats in zip(worker_ids, stats_list):
         for step_name, step_data in stats.items():
-            execution_times.append({"worker": i, "step": step_name, "time": step_data.get("execution", 0)})
+            execution_times.append(
+                {"worker": i, "step": step_name, "time": step_data.get("execution", 0)}
+            )
 
             if "download_time" in step_data:
                 io_times.append(
@@ -99,20 +101,24 @@ def generate_plots(data_df, metric, statistic):
 
 if "__main__" == __name__:
     # Pipeline parameters
-    executor = LocalExecutor()
+    executor = LithopsExecutor()
     bucket_name = "aymanb-serverless-genomics"
     prefix = "extract-data/partitions_60/"
     output_dir = "/tmp/"
     extra_env = {"HOME": "/tmp"}
     extra_args = [bucket_name, output_dir]
-    datasource = LocalDataSource()
+    datasource = LithopsDataSource()
     all_keys = datasource.storage.list_keys(bucket_name, prefix)
 
     # Filter keys that include '.ms' in the directory name
     measurement_sets = [key for key in all_keys if ".ms" in key]
-    measurement_sets = list(set("/".join(key.split("/")[:3]) for key in measurement_sets))
+    measurement_sets = list(
+        set("/".join(key.split("/")[:3]) for key in measurement_sets)
+    )
     map = [
-        RebinningStep("extract-data/parameters/STEP1-flagrebin.parset", "rebinning.lua"),
+        RebinningStep(
+            "extract-data/parameters/STEP1-flagrebin.parset", "rebinning.lua"
+        ),
         CalibrationStep(
             "extract-data/parameters/STEP2A-calibration.parset",
             "extract-data/parameters/STEP2A-apparent.skymodel",
@@ -129,14 +135,18 @@ if "__main__" == __name__:
         "extract-data/output/image",
     )
     # Execute all the steps that can be executed in parallel in a single worker.
-    results_and_timings = executor.execute_steps(map, measurement_sets, extra_args=extra_args, extra_env=extra_env)
+    results_and_timings = executor.execute_steps(
+        map, measurement_sets, extra_args=extra_args, extra_env=extra_env
+    )
 
     # Generate list of result and stats
     calibrated_ms = [rt["result"] for rt in results_and_timings]
     stats_list = [rt["stats"] for rt in results_and_timings]
 
     # Execute Imaging step, Reduce phase.
-    imaging = executor.execute_call_async(reduce, calibrated_ms, extra_args=extra_args, extra_env=extra_env)
+    imaging = executor.execute_call_async(
+        reduce, calibrated_ms, extra_args=extra_args, extra_env=extra_env
+    )
 
     imaging_result = imaging["result"]
     imaging_stats = imaging["stats"]
@@ -147,7 +157,10 @@ if "__main__" == __name__:
     print(rebin_calib_stats)
     print(imaging_stats)
     all_data_df = pd.concat(
-        [generate_step_df(stats, worker_id) for worker_id, stats in enumerate(rebin_calib_stats)]
+        [
+            generate_step_df(stats, worker_id)
+            for worker_id, stats in enumerate(rebin_calib_stats)
+        ]
         + [generate_step_df(imaging_stats, "Imaging")]
     )
 
@@ -160,7 +173,9 @@ if "__main__" == __name__:
         "Imaging",
     ]
 
-    all_data_df["Step"] = pd.Categorical(all_data_df["Step"], categories=step_order, ordered=True)
+    all_data_df["Step"] = pd.Categorical(
+        all_data_df["Step"], categories=step_order, ordered=True
+    )
 
     # Define metrics
     metrics = ["Execution Time", "I/O Time"]
@@ -174,7 +189,11 @@ if "__main__" == __name__:
             if metric == "I/O Time"
             else all_data_df["Execution Time"]
         )
-        statistic_df = all_data_df.groupby("Step").agg({metric: ["mean", "min", "max"]}).reset_index()
+        statistic_df = (
+            all_data_df.groupby("Step")
+            .agg({metric: ["mean", "min", "max"]})
+            .reset_index()
+        )
 
         # Plot the mean values with error bars
         x = np.arange(len(statistic_df))
@@ -234,7 +253,9 @@ if "__main__" == __name__:
                     # Check if the phase exists in this step
                     if phase in worker[step]:
                         duration = worker[step][phase]
-                        ax.broken_barh([(start_time, duration)], (i - 0.4, 0.8), facecolors=color)
+                        ax.broken_barh(
+                            [(start_time, duration)], (i - 0.4, 0.8), facecolors=color
+                        )
                         ax.text(
                             start_time + duration / 2,
                             i,
