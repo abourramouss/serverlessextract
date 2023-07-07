@@ -1,6 +1,7 @@
 # Local baseline of the pipeline, without simulating the cloud enviroment, single MS.
 import os
 import subprocess as sp
+import psutil
 
 
 class LocalPipeline:
@@ -30,10 +31,14 @@ class RebinningStep:
         ]
 
         print("Rebinning step")
-        out = sp.run(cmd, capture_output=True, text=True)
-        print(out.stdout)
-        print(out.stderr)
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = proc.communicate()
+        stdout = stdout.decode("utf-8")
+        stderr = stderr.decode("utf-8")
+        p = psutil.Process(proc.pid)
 
+        print(stdout)
+        print(stderr)
         return write_path
 
 
@@ -61,9 +66,13 @@ class CalibrationStep:
 
         # We have to create the output file beforehand since DP3 doesn't do it
         print("Calibration step")
-        out = sp.run(cmd, capture_output=True, text=True)
-        print(out.stdout)
-        print(out.stderr)
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = proc.communicate()
+        stdout = stdout.decode("utf-8")
+        stderr = stderr.decode("utf-8")
+
+        print(stdout)
+        print(stderr)
 
 
 # Inputs:
@@ -89,9 +98,13 @@ class SubstractionStep:
         ]
 
         print("Substraction step")
-        out = sp.run(cmd, capture_output=True, text=True)
-        print(out.stdout)
-        print(out.stderr)
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = proc.communicate()
+        stdout = stdout.decode("utf-8")
+        stderr = stderr.decode("utf-8")
+
+        print(stdout)
+        print(stderr)
 
 
 # Inputs:
@@ -111,10 +124,13 @@ class ApplyCalibrationStep:
             f"apply.parmdb={input_h5}",
         ]
         print("Apply calibration step")
-        out = sp.run(cmd, capture_output=True, text=True)
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = proc.communicate()
+        stdout = stdout.decode("utf-8")
+        stderr = stderr.decode("utf-8")
 
-        print(out.stdout)
-        print(out.stderr)
+        print(stdout)
+        print(stderr)
 
 
 # Inputs:
@@ -159,9 +175,13 @@ class ImagingStep:
             calibrated_mesurement_set,
         ]
         print("Imaging step")
-        out = sp.run(cmd, capture_output=True, text=True)
-        print(out.stdout)
-        print(out.stderr)
+        proc = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = proc.communicate()
+        stdout = stdout.decode("utf-8")
+        stderr = stderr.decode("utf-8")
+
+        print(stdout)
+        print(stderr)
 
 
 if "__main__" == __name__:
