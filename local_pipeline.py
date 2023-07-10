@@ -2,6 +2,68 @@
 import os
 import subprocess as sp
 import psutil
+import shutil
+import time
+from typing import List, Tuple
+import matplotlib.pyplot as plt
+
+
+def execute_command(cmd: List[str]) -> List[List[float]]:
+    stats = []
+    num_cores = psutil.cpu_count(logical=True)
+    proc = sp.Popen(cmd)
+    p = psutil.Process(proc.pid)
+    while proc.poll() is None:
+        try:
+            cpu_usage = p.cpu_percent(interval=1)
+            mem_usage = p.memory_info().rss / 1024**2
+            # print(f"CPU usage: {cpu_usage/num_cores}")
+            # print(f"Memory usage: {mem_usage} MB")
+            stats.append([cpu_usage, mem_usage])
+        except psutil.NoSuchProcess:
+            print("Process finished")
+            break
+        time.sleep(1)
+    return stats
+
+
+import os
+
+
+def plot_stats(stats: List[List[float]], subfolder: str, class_name: str) -> None:
+    # Transpose the list of lists
+    cpu_stats, mem_stats = zip(*stats)
+
+    plt.figure()
+
+    # Plot CPU stats
+    plt.subplot(2, 1, 1)
+    plt.plot(cpu_stats, label="CPU usage")
+    plt.xlabel("Time (s)")
+    plt.ylabel("CPU usage (%)")
+    plt.legend()
+
+    # Plot memory stats
+    plt.subplot(2, 1, 2)
+    plt.plot(mem_stats, label="Memory usage")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Memory usage (MB)")
+    plt.legend()
+
+    plt.tight_layout()
+
+    # Create the stats directory if it doesn't already exist
+    if not os.path.exists("stats"):
+        os.makedirs("stats")
+
+    # Create the subfolder inside the stats directory if it doesn't already exist
+    if not os.path.exists(f"stats/{subfolder}"):
+        os.makedirs(f"stats/{subfolder}")
+
+    # Save the figure to the specified subfolder with the class_name
+    plt.savefig(f"stats/{subfolder}/{class_name}.png")
+
+    plt.close()
 
 
 class LocalPipeline:
@@ -31,15 +93,10 @@ class RebinningStep:
         ]
 
         print("Rebinning step")
-        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-        stdout, stderr = proc.communicate()
-        stdout = stdout.decode("utf-8")
-        stderr = stderr.decode("utf-8")
-        p = psutil.Process(proc.pid)
 
-        print(stdout)
-        print(stderr)
-        return write_path
+        stats = execute_command(cmd)
+
+        return write_path, stats
 
 
 # Inputs:
@@ -66,13 +123,8 @@ class CalibrationStep:
 
         # We have to create the output file beforehand since DP3 doesn't do it
         print("Calibration step")
-        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-        stdout, stderr = proc.communicate()
-        stdout = stdout.decode("utf-8")
-        stderr = stderr.decode("utf-8")
-
-        print(stdout)
-        print(stderr)
+        stats = execute_command(cmd)
+        return stats
 
 
 # Inputs:
@@ -98,13 +150,8 @@ class SubstractionStep:
         ]
 
         print("Substraction step")
-        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-        stdout, stderr = proc.communicate()
-        stdout = stdout.decode("utf-8")
-        stderr = stderr.decode("utf-8")
-
-        print(stdout)
-        print(stderr)
+        stats = execute_command(cmd)
+        return stats
 
 
 # Inputs:
@@ -124,13 +171,8 @@ class ApplyCalibrationStep:
             f"apply.parmdb={input_h5}",
         ]
         print("Apply calibration step")
-        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-        stdout, stderr = proc.communicate()
-        stdout = stdout.decode("utf-8")
-        stderr = stderr.decode("utf-8")
-
-        print(stdout)
-        print(stderr)
+        stats = execute_command(cmd)
+        return stats
 
 
 # Inputs:
@@ -175,24 +217,19 @@ class ImagingStep:
             calibrated_mesurement_set,
         ]
         print("Imaging step")
-        proc = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-        stdout, stderr = proc.communicate()
-        stdout = stdout.decode("utf-8")
-        stderr = stderr.decode("utf-8")
-
-        print(stdout)
-        print(stderr)
+        stats = execute_command(cmd)
+        return stats
 
 
 if "__main__" == __name__:
+    # Parameters for rebinning step
     ms = "/home/ayman/Downloads/entire_ms/SB205.MS"
     write_path = "/home/ayman/Downloads/pipeline/SB205.ms"
     flagrebinparset = (
         "/home/ayman/Downloads/pipeline/parameters/rebinning/STEP1-flagrebin.parset"
     )
 
-    rebinning_step = RebinningStep()
-    cal_ms = rebinning_step(ms, flagrebinparset, write_path)
+    # Parameters for calibration step
 
     h5_path = "/home/ayman/Downloads/pipeline/cal_out/output.h5"
     cal_parameter_path = (
@@ -202,34 +239,67 @@ if "__main__" == __name__:
         "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-apparent.sourcedb"
     )
 
+    # Parameters for substraction step
+    sub_parameter_path = (
+        "/home/ayman/Downloads/pipeline/parameters/sub/STEP2B-subtract.parset"
+    )
+
+    # Parameters for apply calibration step
+    apply_parameter_path = (
+        "/home/ayman/Downloads/pipeline/parameters/apply/STEP2C-applycal.parset"
+    )
+
+    # Parameters for imaging step
+
+    image_output = "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"
+
+    # Check if there is any previous results from a previous execution
+
+    if os.path.exists(write_path):
+        shutil.rmtree(write_path)
+
+    if os.path.isfile(h5_path):
+        os.remove(h5_path)
+
+    if os.path.exists(image_output):
+        images = os.listdir(image_output)
+        for image in images:
+            os.remove(os.path.join(image_output, image))
+
+    rebinning_step = RebinningStep()
+    cal_ms, stats = rebinning_step(
+        measurement_set=ms, parameter_file_path=flagrebinparset, write_path=write_path
+    )
+
+    plot_stats(stats, "stats", rebinning_step.__class__.__name__)
     calibration_step = CalibrationStep()
-    calibration_step(
+    stats = calibration_step(
         calibrated_measurement_set=cal_ms,
         parameter_file_path=cal_parameter_path,
         output_h5=h5_path,
         sourcedb_directory=source_db_path,
     )
-    sub_parameter_path = (
-        "/home/ayman/Downloads/pipeline/parameters/sub/STEP2B-subtract.parset"
-    )
+    plot_stats(stats, "stats", calibration_step.__class__.__name__)
+
     substraction_step = SubstractionStep()
 
-    substraction_step(
+    stats = substraction_step(
         calibrated_mesurement_set=cal_ms,
         parameter_file_path=sub_parameter_path,
         input_h5=h5_path,
         sourcedb_directory=source_db_path,
     )
-    apply_parameter_path = (
-        "/home/ayman/Downloads/pipeline/parameters/apply/STEP2C-applycal.parset"
-    )
+
+    plot_stats(stats, "stats", substraction_step.__class__.__name__)
+
     apply_calibration_step = ApplyCalibrationStep()
-    apply_calibration_step(
+    stats = apply_calibration_step(
         parameter_file_path=apply_parameter_path,
         calibrated_mesurement_set=cal_ms,
         input_h5=h5_path,
     )
+    plot_stats(stats, "stats", apply_calibration_step.__class__.__name__)
 
-    image_output = "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"
     imaging_step = ImagingStep()
-    imaging_step(calibrated_mesurement_set=cal_ms, output_dir=image_output)
+    stats = imaging_step(calibrated_mesurement_set=cal_ms, output_dir=image_output)
+    plot_stats(stats, "stats", imaging_step.__class__.__name__)
