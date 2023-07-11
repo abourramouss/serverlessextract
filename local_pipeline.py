@@ -5,7 +5,7 @@ import subprocess as sp
 import psutil
 import time
 import matplotlib.pyplot as plt
-from typing import List
+from typing import List, Union
 import shutil
 import lithops
 
@@ -25,26 +25,42 @@ class PipelineStep(ABC):
 
 class Executor(ABC):
     @abstractmethod
+    def execute_step(self, step: PipelineStep, parameters: dict) -> None:
+        pass
+
+    @abstractmethod
     def execute_steps(self, steps: List[PipelineStep]) -> None:
         pass
 
 
 class LocalExecutor(Executor):
-    def execute_steps(self, steps: List[PipelineStep], parameters: dict) -> None:
-        for step in steps:
-            step(parameters[step.__class__.__name__])
+    def execute_step(self, step: PipelineStep, parameters: Union[dict, list]) -> None:
+        step(parameters[step.__class__.__name__])
+
+    def execute_steps(
+        self, steps: Union[List[PipelineStep], PipelineStep], parameters: dict
+    ) -> None:
+        if isinstance(steps, PipelineStep):
+            self.execute_step(steps, parameters)
+        elif isinstance(steps, list):
+            for step in steps:
+                self.execute_step(step, parameters)
 
 
 class LithopsExecutor(Executor):
     def __init__(self):
         self.executor = lithops.FunctionExecutor()
 
+    def execute_step(self, step: PipelineStep, parameters: dict) -> None:
+        step(parameters[step.__class__.__name__])
+
     def execute_steps(self, steps: List[PipelineStep]) -> None:
         def _execute_steps(self, steps: List[PipelineStep], parameters: dict) -> None:
             for step in steps:
-                step(parameters[step.__class__.__name__])
+                self.execute_step(step, parameters)
 
-        self.executor.map(_execute_steps, steps)
+        futures = self.executor.map(_execute_steps, steps)
+        self.executor.get_result(fs=futures)
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -64,6 +80,27 @@ class DataSource(ABC):
     @abstractmethod
     def upload_ms(self, read_path: str, write_path: str) -> None:
         pass
+
+    def remove_cached(self):
+        if os.path.exists(parameters[RebinningStep.__name__]["write_path"]):
+            shutil.rmtree(parameters[RebinningStep.__name__]["write_path"])
+
+        if os.path.exists(parameters[CalibrationStep.__name__]["output_h5"]):
+            os.remove(parameters[CalibrationStep.__name__]["output_h5"])
+
+        if os.path.exists(
+            os.path.dirname(parameters[ImagingStep.__name__]["output_dir"])
+        ):
+            images = os.listdir(
+                os.path.dirname(parameters[ImagingStep.__name__]["output_dir"])
+            )
+            for image in images:
+                os.remove(
+                    os.path.join(
+                        os.path.dirname(parameters[ImagingStep.__name__]["output_dir"]),
+                        image,
+                    )
+                )
 
 
 class LithopsDataSource(DataSource):
@@ -92,27 +129,6 @@ class LocalDataSource(DataSource):
 
     def upload_ms(self, read_path: str, write_path: str) -> None:
         pass
-
-    def remove_cached(self):
-        if os.path.exists(parameters[RebinningStep.__name__]["write_path"]):
-            shutil.rmtree(parameters[RebinningStep.__name__]["write_path"])
-
-        if os.path.exists(parameters[CalibrationStep.__name__]["output_h5"]):
-            os.remove(parameters[CalibrationStep.__name__]["output_h5"])
-
-        if os.path.exists(
-            os.path.dirname(parameters[ImagingStep.__name__]["output_dir"])
-        ):
-            images = os.listdir(
-                os.path.dirname(parameters[ImagingStep.__name__]["output_dir"])
-            )
-            for image in images:
-                os.remove(
-                    os.path.join(
-                        os.path.dirname(parameters[ImagingStep.__name__]["output_dir"]),
-                        image,
-                    )
-                )
 
 
 # TODO: Enable ingestion of chunks or entire ms, rebinning measurement_set could potentially be a list of ms
