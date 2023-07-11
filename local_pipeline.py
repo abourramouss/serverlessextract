@@ -5,64 +5,125 @@ import subprocess as sp
 import psutil
 import time
 import matplotlib.pyplot as plt
-from pathlib import Path
-from typing import List, Tuple
+from typing import List
 import shutil
+import lithops
+
+
+class PipelineStep(ABC):
+    @abstractmethod
+    def build_command(self, *args, **kwargs):
+        pass
+
+    def __call__(self, params):
+        cmd = self.build_command(**params)
+        print(f"Running {self.__class__.__name__}")
+        stats = Pipeline.execute_command(cmd)
+        Pipeline.plot_stats(stats, "stats", self.__class__.__name__)
+        return stats
 
 
 class Executor(ABC):
     @abstractmethod
-    def execute(self, cmd: List[str]) -> None:
+    def execute_steps(self, steps: List[PipelineStep]) -> None:
         pass
 
 
 class LocalExecutor(Executor):
-    def execute(self, cmd: List[str]) -> None:
-        sp.run(cmd)
+    def execute_steps(self, steps: List[PipelineStep], parameters: dict) -> None:
+        for step in steps:
+            step(parameters[step.__class__.__name__])
 
 
 class LithopsExecutor(Executor):
-    pass
+    def __init__(self):
+        self.executor = lithops.FunctionExecutor()
+
+    def execute_steps(self, steps: List[PipelineStep]) -> None:
+        def _execute_steps(self, steps: List[PipelineStep], parameters: dict) -> None:
+            for step in steps:
+                step(parameters[step.__class__.__name__])
+
+        self.executor.map(_execute_steps, steps)
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
 class DataSource(ABC):
     @abstractmethod
-    def download_file(self, file_path: str) -> None:
+    def download_file(self, read_path: str, write_path: str) -> None:
         pass
 
     @abstractmethod
-    def download_directory(self, directory_path: str) -> None:
+    def download_ms(self, read_path: str, write_path: str) -> None:
         pass
 
-    def upload_file(self, file_path: str) -> None:
+    @abstractmethod
+    def upload_file(self, read_path: str, write_path: str) -> None:
         pass
 
-    def upload_directory(self, directory_path: str) -> None:
+    @abstractmethod
+    def upload_ms(self, read_path: str, write_path: str) -> None:
         pass
 
 
 class LithopsDataSource(DataSource):
-    pass
+    def download_file(self, read_bucket_directory: str, write_path: str) -> None:
+        pass
+
+    def download_ms(self, read_bucket_path: str, write_path: str) -> None:
+        pass
+
+    def upload_file(self, read_file_path: str, write_bucket_path: str) -> None:
+        pass
+
+    def upload_ms(self, read_ms_path: str, write_file_directory: str) -> None:
+        pass
 
 
 class LocalDataSource(DataSource):
-    pass
+    def download_file(self, read_path: str, write_path: str) -> None:
+        pass
+
+    def download_ms(self, read_path: str, write_path: str) -> None:
+        pass
+
+    def upload_file(self, read_path: str, write_path: str) -> None:
+        pass
+
+    def upload_ms(self, read_path: str, write_path: str) -> None:
+        pass
+
+    def remove_cached(self):
+        if os.path.exists(parameters[RebinningStep.__name__]["write_path"]):
+            shutil.rmtree(parameters[RebinningStep.__name__]["write_path"])
+
+        if os.path.exists(parameters[CalibrationStep.__name__]["output_h5"]):
+            os.remove(parameters[CalibrationStep.__name__]["output_h5"])
+
+        if os.path.exists(
+            os.path.dirname(parameters[ImagingStep.__name__]["output_dir"])
+        ):
+            images = os.listdir(
+                os.path.dirname(parameters[ImagingStep.__name__]["output_dir"])
+            )
+            for image in images:
+                os.remove(
+                    os.path.join(
+                        os.path.dirname(parameters[ImagingStep.__name__]["output_dir"]),
+                        image,
+                    )
+                )
 
 
-def remove_cached():
-    if os.path.exists(parameters[RebinningStep.__name__]["write_path"]):
-        shutil.rmtree(parameters[RebinningStep.__name__]["write_path"])
-
-    if os.path.exists(parameters[CalibrationStep.__name__]["output_h5"]):
-        os.remove(parameters[CalibrationStep.__name__]["output_h5"])
-
-    if os.path.exists("/home/ayman/Downloads/pipeline/OUTPUT/"):
-        images = os.listdir("/home/ayman/Downloads/pipeline/OUTPUT/")
-        for image in images:
-            os.remove(os.path.join("/home/ayman/Downloads/pipeline/OUTPUT/", image))
+# TODO: Enable ingestion of chunks or entire ms, rebinning measurement_set could potentially be a list of ms
+# TODO: Refactor rebinning step in Lithops version, lua_file_path is not used,
+# it's directly loaded from the parameter_file_path should be checked if it exists or removed
+# TODO: Enable dynamic loading/linking of the parameter files, this means creating them on runtime,
+# or downloading-modifying them also on runtime.
+# TODO: Check input parameters for the Pipeline class, not all of them are needed
 
 
+# Enables transparent execution of the pipeline in local or cloud enviroments
 class Pipeline:
     @staticmethod
     def execute_command(cmd: List[str]) -> List[List[float]]:
@@ -118,9 +179,10 @@ class Pipeline:
 
         plt.close()
 
-    def __init__(self, parameters: dict) -> None:
+    def __init__(
+        self, parameters: dict, executor: Executor, datasource: DataSource
+    ) -> None:
         self.parameters = parameters
-
         self.steps = [
             RebinningStep(),
             CalibrationStep(),
@@ -128,23 +190,38 @@ class Pipeline:
             ApplyCalibrationStep(),
             ImagingStep(),
         ]
+        self._executor = executor
+        self._datasource = datasource
+
+    def _prepare_rebinning(self):
+        self._datasource.remove_cached()
+        self._datasource.download_ms(
+            self.parameters[RebinningStep.__name__]["measurement_set"],
+            self.parameters[RebinningStep.__name__]["write_path"],
+        )
+
+    def _prepare_imaging(self):
+        self._datasource.download_ms(
+            self.parameters[ImagingStep.__name__]["calibrated_measurement_set"],
+            self.parameters[ImagingStep.__name__]["output_dir"],
+        )
+
+    def _execute_pipeline(self, steps: List[PipelineStep], parameters: dict):
+        self._executor.execute_steps(steps, parameters)
+
+    def run_rebinning_calibration(self):
+        self._prepare_rebinning()
+        self._execute_pipeline(self.steps[:-1], self.parameters)
+
+    def run_imaging(self):
+        self._prepare_imaging()
+        self._execute_pipeline(self.steps[-1], self.parameters)
+
+    # Depending on the executor and datasource, we should prepare the parameters for execution i.e download ms and parameter files
 
     def run(self):
-        for step in self.steps:
-            step(self.parameters[step.__class__.__name__])
-
-
-class PipelineStep(ABC):
-    @abstractmethod
-    def build_command(self, *args, **kwargs):
-        pass
-
-    def __call__(self, params):
-        cmd = self.build_command(**params)
-        print(f"Running {self.__class__.__name__}")
-        stats = Pipeline.execute_command(cmd)
-        Pipeline.plot_stats(stats, "stats", self.__class__.__name__)
-        return stats
+        self.run_rebinning_calibration()
+        self.run_imaging()
 
 
 # Inputs:
@@ -152,13 +229,6 @@ class PipelineStep(ABC):
 #   - parameter_file_path: path to the parameter file
 # Outputs:
 #   - write_path: creates a new measurement set in the write path
-
-
-# TODO: Refactor rebinning step in Lithops version, lua_file_path is not used,
-# it's directly loaded from the parameter_file_path should be checked if it exists or removed
-# TODO: Enable dynamic loading/linking of the parameter files, this means creating them on runtime,
-# or downloading-modifying them also on runtime.
-# TODO: Check input parameters for the Pipeline class, not all of them are needed
 class RebinningStep(PipelineStep):
     def build_command(
         self, measurement_set: str, parameter_file_path: str, write_path: str
@@ -322,10 +392,8 @@ if __name__ == "__main__":
 
     # Check if there is any previous results from a previous execution, if so, remove them
 
-    remove_cached()
-
     # Run pipeline with parameters
     pipeline = Pipeline(
-        parameters=parameters,
+        parameters=parameters, executor=LocalExecutor(), datasource=LocalDataSource()
     )
     pipeline.run()
