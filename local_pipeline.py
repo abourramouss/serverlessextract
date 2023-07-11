@@ -5,9 +5,13 @@ import subprocess as sp
 import psutil
 import time
 import matplotlib.pyplot as plt
-from typing import List, Union
+from typing import List, Union, Optional
 import shutil
 import lithops
+from lithops import Storage
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from .utils import S3Path
+from pathlib import PurePosixPath
 
 
 class PipelineStep(ABC):
@@ -38,7 +42,9 @@ class LocalExecutor(Executor):
         step(parameters[step.__class__.__name__])
 
     def execute_steps(
-        self, steps: Union[List[PipelineStep], PipelineStep], parameters: dict
+        self,
+        steps: Union[List[PipelineStep], PipelineStep],
+        parameters: Union[dict, list],
     ) -> None:
         if isinstance(steps, PipelineStep):
             self.execute_step(steps, parameters)
@@ -51,13 +57,24 @@ class LithopsExecutor(Executor):
     def __init__(self):
         self.executor = lithops.FunctionExecutor()
 
-    def execute_step(self, step: PipelineStep, parameters: dict) -> None:
+    def execute_step(self, step: PipelineStep, parameters: Union[dict, list]) -> None:
         step(parameters[step.__class__.__name__])
 
-    def execute_steps(self, steps: List[PipelineStep]) -> None:
-        def _execute_steps(self, steps: List[PipelineStep], parameters: dict) -> None:
-            for step in steps:
-                self.execute_step(step, parameters)
+    def execute_steps(
+        self,
+        steps: Union[List[PipelineStep], PipelineStep],
+        parameters: Union[dict, list],
+    ) -> None:
+        def _execute_steps(
+            self,
+            steps: List[PipelineStep],
+            parameters: Union[dict, list],
+        ) -> None:
+            if isinstance(steps, PipelineStep):
+                self.execute_step(steps, parameters)
+            elif isinstance(steps, list):
+                for step in steps:
+                    self.execute_step(step, parameters)
 
         futures = self.executor.map(_execute_steps, steps)
         self.executor.get_result(fs=futures)
@@ -104,16 +121,19 @@ class DataSource(ABC):
 
 
 class LithopsDataSource(DataSource):
-    def download_file(self, read_bucket_directory: str, write_path: str) -> None:
+    def __init__(self):
+        self.storage = Storage()
+
+    def download_file(self, read_path: str, write_path: str) -> None:
         pass
 
-    def download_ms(self, read_bucket_path: str, write_path: str) -> None:
+    def download_ms(self, read_path: str, write_path: str) -> None:
         pass
 
-    def upload_file(self, read_file_path: str, write_bucket_path: str) -> None:
+    def upload_file(self, read_path: str, write_path: str) -> None:
         pass
 
-    def upload_ms(self, read_ms_path: str, write_file_directory: str) -> None:
+    def upload_ms(self, read_path: str, write_path: str) -> None:
         pass
 
 
@@ -211,9 +231,18 @@ class Pipeline:
 
     def _prepare_rebinning(self):
         self._datasource.remove_cached()
+
         self._datasource.download_ms(
             self.parameters[RebinningStep.__name__]["measurement_set"],
             self.parameters[RebinningStep.__name__]["write_path"],
+        )
+
+        self._datasource.download_file(
+            os.path.basename(
+                self.parameters[RebinningStep.__name__]["parameter_file_path"]
+            ),
+            self.parameters[RebinningStep.__name__]["parameter_file_path"],
+            "rebinning.lua",
         )
 
     def _prepare_imaging(self):
@@ -222,12 +251,18 @@ class Pipeline:
             self.parameters[ImagingStep.__name__]["output_dir"],
         )
 
+    def _finish_rebinning(self):
+        self._datasource.upload_ms(
+            self.parameters[ApplyCalibrationStep.__name__]["write_path"]
+        )
+
     def _execute_pipeline(self, steps: List[PipelineStep], parameters: dict):
         self._executor.execute_steps(steps, parameters)
 
     def run_rebinning_calibration(self):
         self._prepare_rebinning()
         self._execute_pipeline(self.steps[:-1], self.parameters)
+        self._finish_rebinning()
 
     def run_imaging(self):
         self._prepare_imaging()
@@ -367,11 +402,23 @@ class ImagingStep(PipelineStep):
 
 
 if __name__ == "__main__":
+    # Pipeline
+    # Inputs:
+    #   - measurement_set: path to the measurement set
+    # Outputs:
+    #   - write_path: creates a new measurement set in the write path
     # Obligatory parameters needed in the pipeline:
     #   - measurement_set: path to the measurement set (uncalibrated).
     #   - calibrated_measurement_set: path to the calibrated measurement set (where should rebinning write)
     #   - image_output_path: path to the output directory where the .fits files will be saved
     #   - parameter_file_path: path to the parameter file for each step
+
+    # S3 Paths:
+    # ms = "s3://aymanb-serverless-genomics/extract-data/partitions_60/SB205/SB205.MS"
+    # parameters = s3://aymanb-serverless-genomics/extract-data/parameters
+    # calibrated_ms = "s3://aymanb-serverless-genomics/pipeline/SB205.ms"
+    # image_output_path = "s3://aymanb-serverless-genomics/pipeline/OUTPUT/Cygloop-205-210-b0-1024"
+
     ms = "/home/ayman/Downloads/entire_ms/SB205.MS"
     calibrated_ms = "/home/ayman/Downloads/pipeline/SB205.ms"
     h5 = "/home/ayman/Downloads/pipeline/cal_out/output.h5"
@@ -406,10 +453,10 @@ if __name__ == "__main__":
         },
     }
 
-    # Check if there is any previous results from a previous execution, if so, remove them
-
     # Run pipeline with parameters
     pipeline = Pipeline(
-        parameters=parameters, executor=LocalExecutor(), datasource=LocalDataSource()
+        parameters=parameters,
+        executor=LithopsExecutor(),
+        datasource=LithopsDataSource(),
     )
     pipeline.run()
