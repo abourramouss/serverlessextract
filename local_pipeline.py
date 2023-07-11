@@ -10,6 +10,59 @@ from typing import List, Tuple
 import shutil
 
 
+class Executor(ABC):
+    @abstractmethod
+    def execute(self, cmd: List[str]) -> None:
+        pass
+
+
+class LocalExecutor(Executor):
+    def execute(self, cmd: List[str]) -> None:
+        sp.run(cmd)
+
+
+class LithopsExecutor(Executor):
+    pass
+
+
+# Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
+class DataSource(ABC):
+    @abstractmethod
+    def download_file(self, file_path: str) -> None:
+        pass
+
+    @abstractmethod
+    def download_directory(self, directory_path: str) -> None:
+        pass
+
+    def upload_file(self, file_path: str) -> None:
+        pass
+
+    def upload_directory(self, directory_path: str) -> None:
+        pass
+
+
+class LithopsDataSource(DataSource):
+    pass
+
+
+class LocalDataSource(DataSource):
+    pass
+
+
+def remove_cached():
+    if os.path.exists(parameters[RebinningStep.__name__]["write_path"]):
+        shutil.rmtree(parameters[RebinningStep.__name__]["write_path"])
+
+    if os.path.exists(parameters[CalibrationStep.__name__]["output_h5"]):
+        os.remove(parameters[CalibrationStep.__name__]["output_h5"])
+
+    if os.path.exists("/home/ayman/Downloads/pipeline/OUTPUT/"):
+        images = os.listdir("/home/ayman/Downloads/pipeline/OUTPUT/")
+        for image in images:
+            os.remove(os.path.join("/home/ayman/Downloads/pipeline/OUTPUT/", image))
+
+
 class Pipeline:
     @staticmethod
     def execute_command(cmd: List[str]) -> List[List[float]]:
@@ -65,11 +118,7 @@ class Pipeline:
 
         plt.close()
 
-    def __init__(
-        self, measurement_set: str, image_output_path: str, parameters: dict
-    ) -> None:
-        self.measurement_set = measurement_set
-        self.image_output_path = image_output_path
+    def __init__(self, parameters: dict) -> None:
         self.parameters = parameters
 
         self.steps = [
@@ -232,52 +281,51 @@ class ImagingStep(PipelineStep):
 
 
 if __name__ == "__main__":
+    # Obligatory parameters needed in the pipeline:
+    #   - measurement_set: path to the measurement set (uncalibrated).
+    #   - calibrated_measurement_set: path to the calibrated measurement set (where should rebinning write)
+    #   - image_output_path: path to the output directory where the .fits files will be saved
+    #   - parameter_file_path: path to the parameter file for each step
+    ms = "/home/ayman/Downloads/entire_ms/SB205.MS"
+    calibrated_ms = "/home/ayman/Downloads/pipeline/SB205.ms"
+    h5 = "/home/ayman/Downloads/pipeline/cal_out/output.h5"
+    image_output_path = "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"
+
     parameters = {
         "RebinningStep": {
-            "measurement_set": "/home/ayman/Downloads/entire_ms/SB205.MS",
+            "measurement_set": ms,
             "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/rebinning/STEP1-flagrebin.parset",
-            "write_path": "/home/ayman/Downloads/pipeline/SB205.ms",
+            "write_path": calibrated_ms,
         },
         "CalibrationStep": {
-            "calibrated_measurement_set": "/home/ayman/Downloads/pipeline/SB205.ms",
+            "calibrated_measurement_set": calibrated_ms,
             "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-calibration.parset",
-            "output_h5": "/home/ayman/Downloads/pipeline/cal_out/output.h5",
+            "output_h5": h5,
             "sourcedb_directory": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-apparent.sourcedb",
         },
         "SubstractionStep": {
-            "calibrated_measurement_set": "/home/ayman/Downloads/pipeline/SB205.ms",
+            "calibrated_measurement_set": calibrated_ms,
             "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/sub/STEP2B-subtract.parset",
-            "input_h5": "/home/ayman/Downloads/pipeline/cal_out/output.h5",
+            "input_h5": h5,
             "sourcedb_directory": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-apparent.sourcedb",
         },
         "ApplyCalibrationStep": {
-            "calibrated_measurement_set": "/home/ayman/Downloads/pipeline/SB205.ms",
+            "calibrated_measurement_set": calibrated_ms,
             "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/apply/STEP2C-applycal.parset",
-            "input_h5": "/home/ayman/Downloads/pipeline/cal_out/output.h5",
+            "input_h5": h5,
         },
         "ImagingStep": {
-            "calibrated_measurement_set": "/home/ayman/Downloads/pipeline/SB205.ms",
+            "calibrated_measurement_set": calibrated_ms,
             "output_dir": "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024",
         },
     }
 
-    # Check if there is any previous results from a previous execution
+    # Check if there is any previous results from a previous execution, if so, remove them
 
-    if os.path.exists(parameters[RebinningStep.__name__]["write_path"]):
-        shutil.rmtree(parameters[RebinningStep.__name__]["write_path"])
-
-    if os.path.exists(parameters[CalibrationStep.__name__]["output_h5"]):
-        os.remove(parameters[CalibrationStep.__name__]["output_h5"])
-
-    if os.path.exists("/home/ayman/Downloads/pipeline/OUTPUT/"):
-        images = os.listdir("/home/ayman/Downloads/pipeline/OUTPUT/")
-        for image in images:
-            os.remove(os.path.join("/home/ayman/Downloads/pipeline/OUTPUT/", image))
+    remove_cached()
 
     # Run pipeline with parameters
     pipeline = Pipeline(
-        measurement_set="/home/ayman/Downloads/entire_ms/SB205.MS",
-        image_output_path="/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024",
         parameters=parameters,
     )
     pipeline.run()
