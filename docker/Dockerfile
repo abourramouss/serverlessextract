@@ -92,7 +92,8 @@ RUN pip install --upgrade --ignore-installed pip wheel setuptools \
 	kafka-python \
 	cloudpickle \
 	ps-mem \
-	tblib
+	tblib \
+	psutil
 
 WORKDIR ${FUNCTION_DIR}
 
