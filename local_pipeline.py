@@ -10,7 +10,13 @@ import shutil
 import lithops
 from lithops import Storage
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .utils import S3Path
+from utils import (
+    S3Path,
+    rebinning_param_parset,
+    cal_param_parset,
+    sub_param_parset,
+    apply_cal_param_parset,
+)
 from pathlib import PurePosixPath
 
 
@@ -83,22 +89,35 @@ class LithopsExecutor(Executor):
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
 class DataSource(ABC):
     @abstractmethod
-    def download_file(self, read_path: str, write_path: str) -> None:
+    def download_file(
+        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+    ) -> None:
         pass
 
     @abstractmethod
-    def download_ms(self, read_path: str, write_path: str) -> None:
+    def download_directory(
+        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+    ) -> None:
         pass
 
     @abstractmethod
-    def upload_file(self, read_path: str, write_path: str) -> None:
+    def upload_file(
+        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+    ) -> None:
         pass
 
     @abstractmethod
-    def upload_ms(self, read_path: str, write_path: str) -> None:
+    def upload_directory(
+        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+    ) -> None:
         pass
 
     def remove_cached(self):
+        for param in parameters:
+            if "parameter_file_path" in parameters[param]:
+                if os.path.exists(parameters[param]["parameter_file_path"]):
+                    os.remove(parameters[param]["parameter_file_path"])
+
         if os.path.exists(parameters[RebinningStep.__name__]["write_path"]):
             shutil.rmtree(parameters[RebinningStep.__name__]["write_path"])
 
@@ -119,44 +138,78 @@ class DataSource(ABC):
                     )
                 )
 
+    def write_parset_dict_to_file(self, parset_dict: dict, filename: str):
+        with open(filename, "w") as f:
+            for key, value in parset_dict.items():
+                f.write(f"{key}={value}\n")
+
 
 class LithopsDataSource(DataSource):
     def __init__(self):
         self.storage = Storage()
 
-    def download_file(self, read_path: str, write_path: str) -> None:
+    def download_file(
+        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+    ) -> None:
         pass
 
-    def download_ms(self, read_path: str, write_path: str) -> None:
+    def download_directory(
+        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+    ) -> None:
         pass
 
-    def upload_file(self, read_path: str, write_path: str) -> None:
+    def upload_file(
+        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+    ) -> None:
         pass
 
-    def upload_ms(self, read_path: str, write_path: str) -> None:
+    def upload_directory(
+        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+    ) -> None:
         pass
 
 
 class LocalDataSource(DataSource):
-    def download_file(self, read_path: str, write_path: str) -> None:
-        pass
+    def download_file(
+        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+    ) -> None:
+        if isinstance(read_path, S3Path):
+            try:
+                os.makedirs(os.path.dirname(write_path), exist_ok=True)
+                self.storage.download_file(read_path.bucket, read_path.key, write_path)
+            except Exception as e:
+                print(f"Failed to download file {read_path.key}: {e}")
 
-    def download_ms(self, read_path: str, write_path: str) -> None:
-        pass
+    def download_directory(
+        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+    ) -> None:
+        keys = self.storage.list_keys(read_path.bucket, prefix=read_path.key)
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            futures = [
+                executor.submit(self.download_file, read_path, write_path)
+                for key in keys
+            ]
+        for future in as_completed(futures):
+            future.result()
 
-    def upload_file(self, read_path: str, write_path: str) -> None:
-        pass
+    def upload_file(
+        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+    ) -> None:
+            
 
-    def upload_ms(self, read_path: str, write_path: str) -> None:
+    def upload_directory(
+        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+    ) -> None:
         pass
 
 
 # TODO: Enable ingestion of chunks or entire ms, rebinning measurement_set could potentially be a list of ms
 # TODO: Refactor rebinning step in Lithops version, lua_file_path is not used,
 # it's directly loaded from the parameter_file_path should be checked if it exists or removed
-# TODO: Enable dynamic loading/linking of the parameter files, this means creating them on runtime,
+# TODO: DONE Enable dynamic loading/linking of the parameter files, this means creating them on runtime,
 # or downloading-modifying them also on runtime.
 # TODO: Check input parameters for the Pipeline class, not all of them are needed
+# TODO: Abstract parameter dict logic to a class, to handle S3 and posix fs.
 
 
 # Enables transparent execution of the pipeline in local or cloud enviroments
@@ -216,7 +269,10 @@ class Pipeline:
         plt.close()
 
     def __init__(
-        self, parameters: dict, executor: Executor, datasource: DataSource
+        self,
+        parameters: dict,
+        executor: Executor,
+        datasource: DataSource,
     ) -> None:
         self.parameters = parameters
         self.steps = [
@@ -229,31 +285,46 @@ class Pipeline:
         self._executor = executor
         self._datasource = datasource
 
+    def _prepare_parameters(self):
+        # Create parset files in the worker and download the lua and source db files.
+        self._datasource.write_parset_dict_to_file(
+            rebinning_param_parset,
+            self.parameters[RebinningStep.__name__]["parameter_file_path"],
+        )
+        self._datasource.write_parset_dict_to_file(
+            cal_param_parset,
+            self.parameters[CalibrationStep.__name__]["parameter_file_path"],
+        )
+        self._datasource.write_parset_dict_to_file(
+            sub_param_parset,
+            self.parameters[SubstractionStep.__name__]["parameter_file_path"],
+        )
+        self._datasource.write_parset_dict_to_file(
+            apply_cal_param_parset,
+            self.parameters[ApplyCalibrationStep.__name__]["parameter_file_path"],
+        )
+
     def _prepare_rebinning(self):
         self._datasource.remove_cached()
-
-        self._datasource.download_ms(
+        self._prepare_parameters()
+        # Download the ms into the worker
+        self._datasource.download_directory(
             self.parameters[RebinningStep.__name__]["measurement_set"],
             self.parameters[RebinningStep.__name__]["write_path"],
         )
 
-        self._datasource.download_file(
-            os.path.basename(
-                self.parameters[RebinningStep.__name__]["parameter_file_path"]
-            ),
-            self.parameters[RebinningStep.__name__]["parameter_file_path"],
-            "rebinning.lua",
-        )
-
     def _prepare_imaging(self):
-        self._datasource.download_ms(
+        self._datasource.download_directory(
             self.parameters[ImagingStep.__name__]["calibrated_measurement_set"],
             self.parameters[ImagingStep.__name__]["output_dir"],
         )
 
     def _finish_rebinning(self):
-        self._datasource.upload_ms(
-            self.parameters[ApplyCalibrationStep.__name__]["write_path"]
+        self._datasource.upload_directory(
+            self.parameters[ApplyCalibrationStep.__name__][
+                "calibrated_measurement_set"
+            ],
+            S3Path("s3://aymanb-serverless-genomics/extract-data/step2c_out/SB205.ms"),
         )
 
     def _execute_pipeline(self, steps: List[PipelineStep], parameters: dict):
@@ -413,38 +484,53 @@ if __name__ == "__main__":
     #   - image_output_path: path to the output directory where the .fits files will be saved
     #   - parameter_file_path: path to the parameter file for each step
 
-    # S3 Paths:
-    # ms = "s3://aymanb-serverless-genomics/extract-data/partitions_60/SB205/SB205.MS"
-    # parameters = s3://aymanb-serverless-genomics/extract-data/parameters
-    # calibrated_ms = "s3://aymanb-serverless-genomics/pipeline/SB205.ms"
-    # image_output_path = "s3://aymanb-serverless-genomics/pipeline/OUTPUT/Cygloop-205-210-b0-1024"
+    # Possible S3 Paths:
+    # remote_ms = "s3://aymanb-serverless-genomics/extract-data/partitions_60/SB205/SB205.MS"
+    # remote_lua_file_path = "s3://aymanb-serverless-genomics/extract-data/parameters/rebinning.lua"
+    # remote_sourcedb_directory = "s3://aymanb-serverless-genomics/extract-data/parameters/apparent.sourcedb"
+    # remote_calibrated_ms_imaging = "s3://aymanb-serverless-genomics/pipeline/SB205.ms"
+    # remote_image_output_path = "s3://aymanb-serverless-genomics/pipeline/OUTPUT/Cygloop-205-210-b0-1024
 
-    ms = "/home/ayman/Downloads/entire_ms/SB205.MS"
-    calibrated_ms = "/home/ayman/Downloads/pipeline/SB205.ms"
-    h5 = "/home/ayman/Downloads/pipeline/cal_out/output.h5"
-    image_output_path = "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"
+    BUCKET_NAME = "aymanb-serverless-genomics"
+
+    ms = "/home/ayman/Downloads/entire_ms/SB205.MS"  # Can be the local or S3 Path
+    calibrated_ms = "/home/ayman/Downloads/pipeline/SB205.ms"  # Local path of where the calibrated ms is being modified
+    upload_calibrated_ms = (
+        "/home/ayman/Downloads/pipeline/SB205.ms"  # Can be the local or S3 Path
+    )
+    h5 = "/home/ayman/Downloads/pipeline/cal_out/output.h5"  # Local path of the h5 file
+    image_output_path = "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"  # Local path of the image file
+    # Points to where the parameter files are located
+    parameters_write_path = "/home/ayman/Downloads/pipeline/parameters"
+    sourcedb_directory = f"{parameters_write_path}/cal/STEP2A-apparent.sourcedb"  # Local or S3 path of the sourcedb directory
 
     parameters = {
         "RebinningStep": {
             "measurement_set": ms,
-            "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/rebinning/STEP1-flagrebin.parset",
-            "write_path": calibrated_ms,
+            "parameter_file_path": PurePosixPath(
+                f"{parameters_write_path}/rebinning/STEP1-flagrebin.parset"
+            ),
+            "write_path": PurePosixPath(calibrated_ms),
         },
         "CalibrationStep": {
             "calibrated_measurement_set": calibrated_ms,
-            "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-calibration.parset",
-            "output_h5": h5,
-            "sourcedb_directory": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-apparent.sourcedb",
+            "parameter_file_path": PurePosixPath(
+                f"{parameters_write_path}/cal/STEP2A-calibration.parset"
+            ),
+            "output_h5": PurePosixPath(h5),
+            "sourcedb_directory": sourcedb_directory,
         },
         "SubstractionStep": {
-            "calibrated_measurement_set": calibrated_ms,
-            "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/sub/STEP2B-subtract.parset",
-            "input_h5": h5,
-            "sourcedb_directory": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-apparent.sourcedb",
+            "calibrated_measurement_set": PurePosixPath(calibrated_ms),
+            "parameter_file_path": PurePosixPath(
+                f"{parameters_write_path}/sub/STEP2B-subtract.parset"
+            ),
+            "input_h5": PurePosixPath(h5),
+            "sourcedb_directory": sourcedb_directory,
         },
         "ApplyCalibrationStep": {
             "calibrated_measurement_set": calibrated_ms,
-            "parameter_file_path": "/home/ayman/Downloads/pipeline/parameters/apply/STEP2C-applycal.parset",
+            "parameter_file_path": f"{parameters_write_path}/apply/STEP2C-applycal.parset",
             "input_h5": h5,
         },
         "ImagingStep": {
@@ -456,7 +542,7 @@ if __name__ == "__main__":
     # Run pipeline with parameters
     pipeline = Pipeline(
         parameters=parameters,
-        executor=LithopsExecutor(),
-        datasource=LithopsDataSource(),
+        executor=LocalExecutor(),
+        datasource=LocalDataSource(),
     )
     pipeline.run()

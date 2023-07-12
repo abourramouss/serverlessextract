@@ -4,6 +4,65 @@ from pathlib import PurePath, _PosixFlavour
 import logging
 from contextlib import suppress
 
+rebinning_param_parset = {
+    "msin": "",
+    "msout": "",
+    "steps": "[aoflag, avg, count]",
+    "aoflag.type": "aoflagger",
+    "aoflag.memoryperc": 20,
+    "aoflag.strategy": "/home/ayman/Downloads/pipeline/parameters/rebinning/STEP1-NenuFAR64C1S.lua",
+    "avg.type": "averager",
+    "avg.freqstep": 4,
+    "avg.timestep": 8,
+}
+
+cal_param_parset = {
+    "msin": "",
+    "msin.datacolumn": "DATA",
+    "msout": ".",
+    "steps": "[cal]",
+    "cal.type": "ddecal",
+    "cal.mode": "diagonal",
+    "cal.sourcedb": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-apparent.sourcedb",
+    "cal.h5parm": "",
+    "cal.solint": 4,
+    "cal.nchan": 4,
+    "cal.maxiter": 50,
+    "cal.uvlambdamin": 5,
+    "cal.smoothnessconstraint": 2e6,
+}
+
+sub_param_parset = {
+    "msin": "",
+    "msin.datacolumn": "DATA",
+    "msout": ".",
+    "msout.datacolumn": "SUBTRACTED_DATA",
+    "steps": "[sub]",
+    "sub.type": "h5parmpredict",
+    "sub.sourcedb": "/home/ayman/Downloads/pipeline/parameters/cal/STEP2A-apparent.sourcedb",
+    "sub.directions": "[[CygA], [CasA]]",
+    "sub.operation": "subtract",
+    "sub.applycal.parmdb": "",
+    "sub.applycal.steps": "[sub_apply_amp, sub_apply_phase]",
+    "sub.applycal.correction": "fulljones",
+    "sub.applycal.sub_apply_amp.correction": "amplitude000",
+    "sub.applycal.sub_apply_phase.correction": "phase000",
+}
+
+apply_cal_param_parset = {
+    "msin": "",
+    "msin.datacolumn": "SUBTRACTED_DATA",
+    "msout": ".",
+    "msout.datacolumn": "CORRECTED_DATA",
+    "steps": "[apply]",
+    "apply.type": "applycal",
+    "apply.steps": "[apply_amp, apply_phase]",
+    "apply.apply_amp.correction": "amplitude000",
+    "apply.apply_phase.correction": "phase000",
+    "apply.direction": "[Main]",
+    "apply.parmdb": "",
+}
+
 
 def delete_all_in_cwd():
     cwd = os.getcwd()
