@@ -5,12 +5,12 @@ import subprocess as sp
 import psutil
 import time
 import matplotlib.pyplot as plt
-from typing import List, Union, Optional
+from typing import List, Union, Tuple
 import shutil
 import lithops
 from lithops import Storage
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils import (
+from utils.helpers import (
     S3Path,
     rebinning_param_parset,
     cal_param_parset,
@@ -18,6 +18,7 @@ from utils import (
     apply_cal_param_parset,
 )
 from pathlib import PurePosixPath
+import multiprocessing
 
 
 class PipelineStep(ABC):
@@ -61,29 +62,28 @@ class LocalExecutor(Executor):
 
 class LithopsExecutor(Executor):
     def __init__(self):
-        self.executor = lithops.FunctionExecutor()
+        self._executor = lithops.FunctionExecutor()
 
-    def execute_step(self, step: PipelineStep, parameters: Union[dict, list]) -> None:
+    @staticmethod
+    def execute_step(step: PipelineStep, parameters: Union[dict, list]) -> None:
         step(parameters[step.__class__.__name__])
+
+    @staticmethod
+    def _execute_steps(steps_and_parameters: Tuple):
+        steps, parameters = steps_and_parameters
+        if isinstance(steps, PipelineStep):
+            LithopsExecutor.execute_step(steps, parameters)
+        elif isinstance(steps, list):
+            for step in steps:
+                LithopsExecutor.execute_step(step, parameters)
 
     def execute_steps(
         self,
         steps: Union[List[PipelineStep], PipelineStep],
         parameters: Union[dict, list],
     ) -> None:
-        def _execute_steps(
-            self,
-            steps: List[PipelineStep],
-            parameters: Union[dict, list],
-        ) -> None:
-            if isinstance(steps, PipelineStep):
-                self.execute_step(steps, parameters)
-            elif isinstance(steps, list):
-                for step in steps:
-                    self.execute_step(step, parameters)
-
-        futures = self.executor.map(_execute_steps, steps)
-        self.executor.get_result(fs=futures)
+        futures = self._executor.call_async(self._execute_steps, ((steps, parameters),))
+        self._executor.get_result(fs=futures)
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -144,10 +144,7 @@ class DataSource(ABC):
                 f.write(f"{key}={value}\n")
 
 
-class LithopsDataSource(DataSource):
-    def __init__(self):
-        self.storage = Storage()
-
+class LocalDataSource(DataSource):
     def download_file(
         self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
     ) -> None:
@@ -169,7 +166,10 @@ class LithopsDataSource(DataSource):
         pass
 
 
-class LocalDataSource(DataSource):
+class LithopsDataSource(DataSource):
+    def __init__(self):
+        self.storage = Storage()
+
     def download_file(
         self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
     ) -> None:
@@ -195,12 +195,22 @@ class LocalDataSource(DataSource):
     def upload_file(
         self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
     ) -> None:
-            
+        if isinstance(write_path, S3Path):
+            try:
+                self.storage.upload_file(read_path, write_path.bucket, write_path.key)
+            except:
+                print(f"Failed to upload file {read_path} to {write_path}")
 
     def upload_directory(
         self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
     ) -> None:
-        pass
+        files = [file for file in os.walk(read_path)]
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            futures = [
+                executor.submit(self.upload_file, file, write_path) for file in files
+            ]
+        for future in as_completed(futures):
+            future.result()
 
 
 # TODO: Enable ingestion of chunks or entire ms, rebinning measurement_set could potentially be a list of ms
@@ -343,7 +353,7 @@ class Pipeline:
 
     def run(self):
         self.run_rebinning_calibration()
-        self.run_imaging()
+        # self.run_imaging()
 
 
 # Inputs:
