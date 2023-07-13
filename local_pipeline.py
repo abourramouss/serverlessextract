@@ -5,7 +5,7 @@ import subprocess as sp
 import psutil
 import time
 import matplotlib.pyplot as plt
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Callable
 import shutil
 import lithops
 from lithops import Storage
@@ -60,34 +60,27 @@ self._executor.execute_steps(steps, parameters) <- This is not generic
 
 class Executor(ABC):
     @abstractmethod
-    def execute_step(self, step: PipelineStep, parameters: dict) -> None:
-        pass
-
-    @abstractmethod
-    def execute_steps(self, steps: List[PipelineStep]) -> None:
+    def execute(self, runner: Callable, parameters) -> None:
         pass
 
 
 class LocalExecutor(Executor):
-    def execute_step(self, step: PipelineStep, parameters: Union[dict, list]) -> None:
-        step(parameters[step.__class__.__name__])
-
-    def execute_steps(
-        self,
-        steps: Union[List[PipelineStep], PipelineStep],
-        parameters: Union[dict, list],
-    ) -> None:
-        if isinstance(steps, PipelineStep):
-            self.execute_step(steps, parameters)
-        elif isinstance(steps, list):
-            for step in steps:
-                self.execute_step(step, parameters)
+    def execute(self, runner: Callable, parameters) -> None:
+        runner(parameters)
 
 
 class LithopsExecutor(Executor):
     def __init__(self):
         self._executor = lithops.FunctionExecutor()
 
+    def __repr__(self):
+        print("Starting lithops executor...")
+
+    def execute(self, runner: Callable, parameters) -> None:
+        futures = self._executor.call_async(runner, parameters)
+        self._executor.get_result(fs=futures)
+
+    """
     @staticmethod
     def execute_step(step: PipelineStep, parameters: Union[dict, list]) -> None:
         step(parameters[step.__class__.__name__])
@@ -108,6 +101,7 @@ class LithopsExecutor(Executor):
     ) -> None:
         futures = self._executor.call_async(self._execute_steps, ((steps, parameters),))
         self._executor.get_result(fs=futures)
+    """
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -316,6 +310,7 @@ class Pipeline:
             ApplyCalibrationStep(),
             ImagingStep(),
         ]
+
         self._executor = executor
         self._datasource = datasource
 
@@ -338,43 +333,19 @@ class Pipeline:
             self.parameters[ApplyCalibrationStep.__name__]["parameter_file_path"],
         )
 
-    def _prepare_rebinning(self):
+    def _execute_steps(self) -> None:
+        for step in self.steps:
+            step(self.parameters[step.__class__.__name__])
+
+    def _run_pipeline(self, parameters):
         self._datasource.remove_cached()
         self._prepare_parameters()
-        # Download the ms into the worker
-        self._datasource.download_directory(
-            self.parameters[RebinningStep.__name__]["measurement_set"],
-            self.parameters[RebinningStep.__name__]["write_path"],
-        )
-
-    def _finish_rebinning(self):
-        self._datasource.upload_directory(
-            self.parameters[ApplyCalibrationStep.__name__][
-                "calibrated_measurement_set"
-            ],
-            S3Path("s3://aymanb-serverless-genomics/extract-data/step2c_out/SB205.ms"),
-        )
-
-    def _prepare_imaging(self):
-        self._datasource.download_directory(
-            self.parameters[ImagingStep.__name__]["calibrated_measurement_set"],
-            self.parameters[ImagingStep.__name__]["output_dir"],
-        )
-
-    def _execute_pipeline(self, steps: List[PipelineStep], parameters: dict):
-        self._executor.execute_steps(steps, parameters)
-
-    def run_rebinning_calibration(self):
-        self._execute_pipeline(self.steps[:-1], self.parameters)
-
-    def run_imaging(self):
-        self._prepare_imaging()
-        self._execute_pipeline(self.steps[-1], self.parameters)
+        self._execute_steps()
 
     # Depending on the executor and datasource, we should prepare the parameters for execution i.e download ms and parameter files
 
     def run(self):
-        self.run_rebinning_calibration()
+        self._executor.execute(self._run_pipeline, self.parameters)
         # self.run_imaging()
 
 
