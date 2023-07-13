@@ -10,7 +10,7 @@ import shutil
 import lithops
 from lithops import Storage
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils.helpers import (
+from helpers.helpers import (
     S3Path,
     rebinning_param_parset,
     cal_param_parset,
@@ -32,6 +32,30 @@ class PipelineStep(ABC):
         stats = Pipeline.execute_command(cmd)
         Pipeline.plot_stats(stats, "stats", self.__class__.__name__)
         return stats
+
+
+# TODO: Problem: Executor methods aren't generic, this makes it hard to execute things
+# like preprocessing before the step execution, create a more generic interface and
+# implement it in the executors, one idea is just a Callable and set of params
+"""
+class LithopsExecutor(Executor):
+    def __init__(self):
+        self._executor = lithops.FunctionExecutor()
+
+    def compute(self, runner: Callable, parameters: Union[dict, list]) -> None:
+        self._executor.call_async(runner, parameters)
+        self._executor.get_result()
+
+#Usage:
+def foo():
+    download()
+    execute()
+    ...
+self._executor.compute(foo)
+
+Instead of:
+self._executor.execute_steps(steps, parameters) <- This is not generic
+"""
 
 
 class Executor(ABC):
@@ -323,12 +347,6 @@ class Pipeline:
             self.parameters[RebinningStep.__name__]["write_path"],
         )
 
-    def _prepare_imaging(self):
-        self._datasource.download_directory(
-            self.parameters[ImagingStep.__name__]["calibrated_measurement_set"],
-            self.parameters[ImagingStep.__name__]["output_dir"],
-        )
-
     def _finish_rebinning(self):
         self._datasource.upload_directory(
             self.parameters[ApplyCalibrationStep.__name__][
@@ -337,13 +355,17 @@ class Pipeline:
             S3Path("s3://aymanb-serverless-genomics/extract-data/step2c_out/SB205.ms"),
         )
 
+    def _prepare_imaging(self):
+        self._datasource.download_directory(
+            self.parameters[ImagingStep.__name__]["calibrated_measurement_set"],
+            self.parameters[ImagingStep.__name__]["output_dir"],
+        )
+
     def _execute_pipeline(self, steps: List[PipelineStep], parameters: dict):
         self._executor.execute_steps(steps, parameters)
 
     def run_rebinning_calibration(self):
-        self._prepare_rebinning()
         self._execute_pipeline(self.steps[:-1], self.parameters)
-        self._finish_rebinning()
 
     def run_imaging(self):
         self._prepare_imaging()
@@ -502,7 +524,22 @@ if __name__ == "__main__":
     # remote_image_output_path = "s3://aymanb-serverless-genomics/pipeline/OUTPUT/Cygloop-205-210-b0-1024
 
     BUCKET_NAME = "aymanb-serverless-genomics"
-
+    """
+    # S3 paths
+    ms = S3Path(
+        "s3://aymanb-serverless-genomics/extract-data/partitions_5/partition_1.ms"
+    )  # Can be the local or S3 Path
+    calibrated_ms = "/home/ayman/Downloads/pipeline/SB205.ms"  # Local path of where the calibrated ms is being modified
+    upload_calibrated_ms = (
+        "/home/ayman/Downloads/pipeline/SB205.ms"  # Can be the local or S3 Path
+    )
+    h5 = "/home/ayman/Downloads/pipeline/cal_out/output.h5"  # Local path of the h5 file
+    image_output_path = "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"  # Local path of the image file
+    # Points to where the parameter files are located
+    parameters_write_path = "/home/ayman/Downloads/pipeline/parameters"
+    sourcedb_directory = f"{parameters_write_path}/cal/STEP2A-apparent.sourcedb"  # Local or S3 path of the sourcedb directory
+    """
+    # Local paths
     ms = "/home/ayman/Downloads/entire_ms/SB205.MS"  # Can be the local or S3 Path
     calibrated_ms = "/home/ayman/Downloads/pipeline/SB205.ms"  # Local path of where the calibrated ms is being modified
     upload_calibrated_ms = (
