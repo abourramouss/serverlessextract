@@ -9,7 +9,7 @@ rebinning_param_parset = {
     "msout": "",
     "steps": "[aoflag, avg, count]",
     "aoflag.type": "aoflagger",
-    "aoflag.memoryperc": 20,
+    "aoflag.memoryperc": 90,
     "aoflag.strategy": "/home/ayman/Downloads/pipeline/parameters/rebinning/STEP1-NenuFAR64C1S.lua",
     "avg.type": "averager",
     "avg.freqstep": 4,

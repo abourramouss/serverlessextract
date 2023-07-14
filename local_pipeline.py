@@ -34,30 +34,6 @@ class PipelineStep(ABC):
         return stats
 
 
-# TODO: Problem: Executor methods aren't generic, this makes it hard to execute things
-# like preprocessing before the step execution, create a more generic interface and
-# implement it in the executors, one idea is just a Callable and set of params
-"""
-class LithopsExecutor(Executor):
-    def __init__(self):
-        self._executor = lithops.FunctionExecutor()
-
-    def compute(self, runner: Callable, parameters: Union[dict, list]) -> None:
-        self._executor.call_async(runner, parameters)
-        self._executor.get_result()
-
-#Usage:
-def foo():
-    download()
-    execute()
-    ...
-self._executor.compute(foo)
-
-Instead of:
-self._executor.execute_steps(steps, parameters) <- This is not generic
-"""
-
-
 class Executor(ABC):
     @abstractmethod
     def execute(self, runner: Callable, parameters) -> None:
@@ -72,9 +48,6 @@ class LocalExecutor(Executor):
 class LithopsExecutor(Executor):
     def __init__(self):
         self._executor = lithops.FunctionExecutor()
-
-    def __repr__(self):
-        print("Starting lithops executor...")
 
     def execute(self, runner: Callable, parameters) -> None:
         futures = self._executor.call_async(runner, parameters)
@@ -234,8 +207,7 @@ class LithopsDataSource(DataSource):
 # TODO: Enable ingestion of chunks or entire ms, rebinning measurement_set could potentially be a list of ms
 # TODO: Refactor rebinning step in Lithops version, lua_file_path is not used,
 # it's directly loaded from the parameter_file_path should be checked if it exists or removed
-# TODO: DONE Enable dynamic loading/linking of the parameter files, this means creating them on runtime,
-# or downloading-modifying them also on runtime.
+# TODO: Modify the step 1 dynamically so each time the parameters are changed, the lua file is updated!!!
 # TODO: Check input parameters for the Pipeline class, not all of them are needed
 # TODO: Abstract parameter dict logic to a class, to handle S3 and posix fs.
 
@@ -345,6 +317,7 @@ class Pipeline:
     # Depending on the executor and datasource, we should prepare the parameters for execution i.e download ms and parameter files
 
     def run(self):
+        print(self.parameters)
         self._executor.execute(self._run_pipeline, self.parameters)
         # self.run_imaging()
 
