@@ -2,7 +2,7 @@ from lithops import Storage
 import os
 from .datasource import DataSource
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils import timeit_io
+from util import timeit_io
 
 
 class LithopsDataSource(DataSource):

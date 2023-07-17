@@ -2,7 +2,7 @@ import os
 import subprocess
 from abc import ABC, abstractmethod
 from datasource import LithopsDataSource
-from utils import timeit_execution
+from util import timeit_execution
 
 
 class Step(ABC):

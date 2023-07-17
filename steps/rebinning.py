@@ -3,7 +3,7 @@ from .step import Step
 from datasource import LithopsDataSource
 from datasource import DataSource
 import os
-from utils import delete_all_in_cwd
+from util import delete_all_in_cwd
 
 
 class RebinningStep(Step):

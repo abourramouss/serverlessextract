@@ -1,7 +1,7 @@
 import subprocess
 from .step import Step
 from datasource import LithopsDataSource
-from utils import delete_all_in_cwd
+from util import delete_all_in_cwd
 import os
 import time
 import shutil
