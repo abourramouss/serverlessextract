@@ -11,8 +11,6 @@ import matplotlib.patches as mpatches
 import numpy as np
 
 
-
-
 if "__main__" == __name__:
     # Pipeline parameters
     executor = LithopsExecutor()
@@ -35,9 +33,7 @@ if "__main__" == __name__:
         ),
     ]
 
-    print("Executing pipeline")
     # Execute all the steps that can be executed in parallel in a single worker.
     results_and_timings = executor.execute_steps(
         map, measurement_sets, extra_args=extra_args, extra_env=extra_env
     )
-
