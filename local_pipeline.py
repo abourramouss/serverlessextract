@@ -1,37 +1,63 @@
 # Local baseline of the pipeline, without simulating the cloud enviroment, single MS.
 from abc import ABC, abstractmethod
 import os
-import subprocess as sp
-import psutil
-import time
-import matplotlib.pyplot as plt
-from typing import List, Union, Tuple, Callable
-import shutil
+from typing import List, Union
 import lithops
 from typing import Dict, Optional
 from lithops import Storage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from s3path import S3Path
-from util import (
-    rebinning_param_parset,
-    cal_param_parset,
-    sub_param_parset,
-    apply_cal_param_parset,
-)
-from pathlib import PurePosixPath
-import multiprocessing
+import pickle
+from pathlib import PurePosixPath, PosixPath
+import subprocess as sp
 
 
-def s3_to_local_path(s3_path: S3Path, base_local_dir: str = "/tmp") -> str:
+def dict_to_parset(
+    data, output_dir=PosixPath("/tmp"), filename="output.parset"
+) -> PosixPath:
+    lines = []
+
+    for key, value in data.items():
+        # Check if the value is another dictionary
+        if isinstance(value, dict):
+            lines.append(f"[{key}]")
+            for sub_key, sub_value in value.items():
+                if isinstance(sub_value, dict):  # Check for nested dictionaries
+                    lines.append(f"[{sub_key}]")
+                    for sub_sub_key, sub_sub_value in sub_value.items():
+                        lines.append(f"{sub_sub_key} = {sub_sub_value}")
+                else:
+                    lines.append(f"{sub_key} = {sub_value}")
+        else:
+            lines.append(f"{key} = {value}")
+
+    # Convert the list of lines to a single string
+    parset_content = "\n".join(lines)
+
+    # Ensure the directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / filename
+    with output_path.open("w") as file:
+        file.write(parset_content)
+
+    return output_path
+
+
+def s3_to_local_path(
+    s3_path: S3Path, base_local_dir: PurePosixPath = PurePosixPath("/tmp")
+) -> PurePosixPath:
     """Converts an S3Path to a local file path."""
     local_path = os.path.join(base_local_dir, s3_path.bucket, s3_path.key)
-    return local_path
+    return PurePosixPath(local_path)
 
 
 def local_to_s3_path(local_path: str, base_local_dir: str = "/tmp") -> S3Path:
     """Converts a local file path to an S3Path."""
     local_path = os.path.abspath(local_path)
-    bucket, key = local_path.replace(base_local_dir, "").split(os.path.sep)[1:]
+    components = local_path.replace(base_local_dir, "").split(os.path.sep)[1:]
+    bucket = components[0]
+    key = os.path.join(*components[1:])
     return S3Path(f"{bucket}/{key}")
 
 
@@ -39,11 +65,11 @@ class PipelineStep(ABC):
     def __init__(
         self,
         input_data_path: Dict[str, S3Path],
-        parameters_path: Dict[str, S3Path],
+        parameters: Dict,
         output: Optional[Dict[str, S3Path]] = None,
     ):
         self._input_data_path = input_data_path
-        self._parameters_path = parameters_path
+        self._parameters = parameters
         self._output = output
 
     @property
@@ -53,7 +79,7 @@ class PipelineStep(ABC):
 
     @property
     @abstractmethod
-    def parameters_path(self) -> List[S3Path]:
+    def parameters(self) -> Dict:
         pass
 
     @property
@@ -64,30 +90,6 @@ class PipelineStep(ABC):
     @abstractmethod
     def build_command(self, *args, **kwargs):
         pass
-
-
-# TODO: Problem: Executor methods aren't generic, this makes it hard to execute things
-# like preprocessing before the step execution, create a more generic interface and
-# implement it in the executors, one idea is just a Callable and set of params
-"""
-class LithopsExecutor(Executor):
-    def __init__(self):
-        self._executor = lithops.FunctionExecutor()
-
-    def compute(self, runner: Callable, parameters: Union[dict, list]) -> None:
-        self._executor.call_async(runner, parameters)
-        self._executor.get_result()
-
-#Usage:
-def foo():
-    download()
-    execute()
-    ...
-self._executor.compute(foo)
-
-Instead of:
-self._executor.execute_steps(steps, parameters) <- This is not generic
-"""
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -127,26 +129,39 @@ class LithopsDataSource(DataSource):
         self.storage = Storage()
 
     def download_file(
-        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
-    ) -> None:
+        self, read_path: S3Path, write_path: PurePosixPath = PurePosixPath("/tmp")
+    ) -> PurePosixPath:
+        """Download a file from S3 and returns the local path."""
         if isinstance(read_path, S3Path):
             try:
-                os.makedirs(os.path.dirname(write_path), exist_ok=True)
-                self.storage.download_file(read_path.bucket, read_path.key, write_path)
+                local_path = s3_to_local_path(read_path, base_local_dir=str(write_path))
+                print("local_path:", local_path)
+                os.makedirs(local_path.parent, exist_ok=True)
+                self.storage.download_file(
+                    read_path.bucket, read_path.key, str(local_path)
+                )
+                return local_path
             except Exception as e:
                 print(f"Failed to download file {read_path.key}: {e}")
 
     def download_directory(
-        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
-    ) -> None:
+        self, read_path: S3Path, write_path: PurePosixPath = PurePosixPath("/tmp")
+    ) -> PurePosixPath:
+        """Download a directory from S3 and returns the local path."""
         keys = self.storage.list_keys(read_path.bucket, prefix=read_path.key)
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            futures = [
-                executor.submit(self.download_file, read_path, write_path)
-                for key in keys
-            ]
-        for future in as_completed(futures):
-            future.result()
+        local_directory_path = s3_to_local_path(
+            read_path, base_local_dir=str(write_path)
+        )
+
+        for key in keys:
+            s3_file_path = S3Path.from_bucket_key(read_path.bucket, key)
+            local_file_path = s3_to_local_path(
+                s3_file_path, base_local_dir=str(write_path)
+            )
+            os.makedirs(local_file_path.parent, exist_ok=True)
+            self.download_file(s3_file_path, local_file_path)
+
+        return local_directory_path
 
     def upload_file(
         self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
@@ -187,56 +202,86 @@ class RebinningStep(PipelineStep):
     def __init__(
         self,
         input_data_path: Dict[str, S3Path],
-        parameters_path: Dict[str, S3Path],
+        parameters: Dict,
         output: Optional[Dict[str, S3Path]] = None,
     ):
-        super().__init__(input_data_path, parameters_path, output)
+        super().__init__(input_data_path, parameters, output)
 
     @property
     def input_data_path(self) -> List[S3Path]:
         return self._input_data_path
 
     @property
-    def parameters_path(self) -> List[S3Path]:
-        return self._parameters_path
+    def parameters(self) -> Dict:
+        return self._parameters
 
     @property
     def output(self) -> S3Path:
         return self._output
 
-    def build_command(self, ms, calibrated_ms, flagrebin) -> List[str]:
-        data_source = LithopsDataSource()
-
-        print(f"Rebinning {ms}")
-        print(f"Calibrated ms: {calibrated_ms}")
-        print(f"Flag rebin: {flagrebin}")
-
     def run(self):
+        extra_env = {"HOME": "/tmp"}
         function_executor = lithops.FunctionExecutor()
 
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path["ms"].bucket,
             prefix=self.input_data_path["ms"].key,
         )
-        partitions = set()
-        for key in keys:
-            partition = "/".join(key.split("/")[:3])
-            if partition.endswith(".ms"):
-                partitions.add(partition)
 
-        result = [
-            {
-                "ms": partition,
-                "calibrated_ms": self.output["calibrated_ms"],
-                "flagrebin": self.parameters_path["flagrebin"],
-            }
-            for partition in partitions
+        # Create an empty set to hold unique directories
+        unique_partitions = set()
+
+        # Iterate over each key
+        for key in keys:
+            # Split the key into its parts
+            parts = key.split("/")
+
+            # Extract the directory that ends in .ms
+            partition = next((part for part in parts if part.endswith(".ms")), None)
+            if partition:
+                # Combine the prefix with the partition
+                full_partition_path = "/".join(parts[: parts.index(partition) + 1])
+                unique_partitions.add(full_partition_path)
+
+        s3_paths = {
+            (
+                S3Path.from_bucket_key(
+                    bucket=self.input_data_path["ms"].bucket, key=partition
+                ),
+                pickle.dumps(self.parameters),
+                self.output["calibrated_ms"],
+            )
+            for partition in unique_partitions
+        }
+
+        futures = function_executor.map(
+            self.build_command,
+            s3_paths,
+            extra_env=extra_env,
+        )
+        results = function_executor.get_result(futures)
+        return results
+
+    def build_command(
+        self, ms: S3Path, parameters: str, calibrated_ms: S3Path
+    ) -> List[str]:
+        data_source = LithopsDataSource()
+        params = pickle.loads(parameters)
+        partition_path = data_source.download_directory(ms)
+        param_path = dict_to_parset(params["flagrebin"])
+        aoflag_path = data_source.download_file(params["flagrebin"]["aoflag.strategy"])
+
+        cmd = [
+            "DP3",
+            param_path,
+            f"msin={partition_path}",
+            f"apply.parmdb={aoflag_path}",
         ]
 
-        function_executor.map(
-            self.build_command,
-            result,
-        )
+        proc = sp.Popen(cmd)
+        print(partition_path)
+        print(param_path)
+        print(aoflag_path)
 
 
 if __name__ == "__main__":
@@ -259,42 +304,24 @@ if __name__ == "__main__":
     # remote_image_output_path = "s3://aymanb-serverless-genomics/pipeline/OUTPUT/Cygloop-205-210-b0-1024
 
     BUCKET_NAME = "aymanb-serverless-genomics"
-    """
-    # S3 paths
-    ms = S3Path(
-        "s3://aymanb-serverless-genomics/extract-data/partitions_5/partition_1.ms"
-    )  # Can be the local or S3 Path
-    calibrated_ms = "/home/ayman/Downloads/pipeline/SB205.ms"  # Local path of where the calibrated ms is being modified
-    upload_calibrated_ms = (
-        "/home/ayman/Downloads/pipeline/SB205.ms"  # Can be the local or S3 Path
-    )
-    h5 = "/home/ayman/Downloads/pipeline/cal_out/output.h5"  # Local path of the h5 file
-    image_output_path = "/home/ayman/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"  # Local path of the image file
-    # Points to where the parameter files are located
-    parameters_write_path = "/home/ayman/Downloads/pipeline/parameters"
-    sourcedb_directory = f"{parameters_write_path}/cal/STEP2A-apparent.sourcedb"  # Local or S3 path of the sourcedb directory
-    """
-    # Local paths
-    ms = "/home/ubuntu/partition_1.ms"  # Can be the local or S3 Path
-    calibrated_ms = "/home/ubuntu/Downloads/pipeline/SB205.ms"  # Local path of where the calibrated ms is being modified
-    upload_calibrated_ms = (
-        "/home/ubuntu/Downloads/pipeline/SB205.ms"  # Can be the local or S3 Path
-    )
-    h5 = (
-        "/home/ubuntu/Downloads/pipeline/cal_out/output.h5"  # Local path of the h5 file
-    )
-    image_output_path = "/home/ubuntu/Downloads/pipeline/OUTPUT/Cygloop-205-210-b0-1024"  # Local path of the image file
-    # Points to where the parameter files are located
-    parameters_write_path = "/home/ubuntu/Downloads/pipeline/parameters"
-    sourcedb_directory = f"{parameters_write_path}/cal/STEP2A-apparent.sourcedb"  # Local or S3 path of the sourcedb directory
 
     parameters = {
         "RebinningStep": {
             "input_data_path": {"ms": S3Path("/extract/partitions/partitions")},
-            "parameters_path": {
-                "flagrebin": S3Path(
-                    "/aymanb-serverless-genomics/extract-data/rebinning/STEP1-flagrebin.parset"
-                )
+            "parameters": {
+                "flagrebin": {
+                    "msin": "",
+                    "msout": "",
+                    "steps": "[aoflag, avg, count]",
+                    "aoflag.type": "aoflagger",
+                    "aoflag.memoryperc": 90,
+                    "aoflag.strategy": S3Path(
+                        "/extract/parameters/rebinning/STEP1-NenuFAR64C1S.lua"
+                    ),
+                    "avg.type": "averager",
+                    "avg.freqstep": 4,
+                    "avg.timestep": 8,
+                }
             },
             "output": {
                 "calibrated_ms": S3Path(
@@ -304,9 +331,8 @@ if __name__ == "__main__":
         }
     }
 
-    print(parameters["RebinningStep"]["input_data_path"]["ms"].bucket)
     RebinningStep(
         input_data_path=parameters["RebinningStep"]["input_data_path"],
-        parameters_path=parameters["RebinningStep"]["parameters_path"],
+        parameters=parameters["RebinningStep"]["parameters"],
         output=parameters["RebinningStep"]["output"],
     ).run()
