@@ -8,7 +8,7 @@ from lithops import Storage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from s3path import S3Path
 import pickle
-from pathlib import PurePosixPath, PosixPath
+from pathlib import PosixPath
 import subprocess as sp
 
 
@@ -45,11 +45,11 @@ def dict_to_parset(
 
 
 def s3_to_local_path(
-    s3_path: S3Path, base_local_dir: PurePosixPath = PurePosixPath("/tmp")
-) -> PurePosixPath:
+    s3_path: S3Path, base_local_dir: PosixPath = PosixPath("/tmp")
+) -> PosixPath:
     """Converts an S3Path to a local file path."""
     local_path = os.path.join(base_local_dir, s3_path.bucket, s3_path.key)
-    return PurePosixPath(local_path)
+    return PosixPath(local_path)
 
 
 def local_to_s3_path(local_path: str, base_local_dir: str = "/tmp") -> S3Path:
@@ -57,7 +57,7 @@ def local_to_s3_path(local_path: str, base_local_dir: str = "/tmp") -> S3Path:
     local_path = os.path.abspath(local_path)
     components = local_path.replace(base_local_dir, "").split(os.path.sep)[1:]
     bucket = components[0]
-    key = os.path.join(*components[1:])
+    key = "/".join(components[1:])
     return S3Path(f"{bucket}/{key}")
 
 
@@ -96,25 +96,25 @@ class PipelineStep(ABC):
 class DataSource(ABC):
     @abstractmethod
     def download_file(
-        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+        self, read_path: Union[S3Path, PosixPath], write_path: PosixPath
     ) -> None:
         pass
 
     @abstractmethod
     def download_directory(
-        self, read_path: Union[S3Path, PurePosixPath], write_path: PurePosixPath
+        self, read_path: Union[S3Path, PosixPath], write_path: PosixPath
     ) -> None:
         pass
 
     @abstractmethod
     def upload_file(
-        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+        self, read_path: PosixPath, write_path: Union[S3Path, PosixPath]
     ) -> None:
         pass
 
     @abstractmethod
     def upload_directory(
-        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
+        self, read_path: PosixPath, write_path: Union[S3Path, PosixPath]
     ) -> None:
         pass
 
@@ -129,75 +129,63 @@ class LithopsDataSource(DataSource):
         self.storage = Storage()
 
     def download_file(
-        self, read_path: S3Path, write_path: PurePosixPath = PurePosixPath("/tmp")
-    ) -> PurePosixPath:
+        self, read_path: S3Path, base_path: PosixPath = PosixPath("/tmp")
+    ) -> PosixPath:
         """Download a file from S3 and returns the local path."""
         if isinstance(read_path, S3Path):
             try:
-                local_path = s3_to_local_path(read_path, base_local_dir=str(write_path))
-                print("local_path:", local_path)
+                local_path = s3_to_local_path(read_path, base_local_dir=str(base_path))
                 os.makedirs(local_path.parent, exist_ok=True)
                 self.storage.download_file(
                     read_path.bucket, read_path.key, str(local_path)
                 )
-                return local_path
+                return PosixPath(local_path)
             except Exception as e:
                 print(f"Failed to download file {read_path.key}: {e}")
 
     def download_directory(
-        self, read_path: S3Path, write_path: PurePosixPath = PurePosixPath("/tmp")
-    ) -> PurePosixPath:
+        self, read_path: S3Path, base_path: PosixPath = PosixPath("/tmp")
+    ) -> PosixPath:
         """Download a directory from S3 and returns the local path."""
         keys = self.storage.list_keys(read_path.bucket, prefix=read_path.key)
         local_directory_path = s3_to_local_path(
-            read_path, base_local_dir=str(write_path)
+            read_path, base_local_dir=str(base_path)
         )
 
         for key in keys:
             s3_file_path = S3Path.from_bucket_key(read_path.bucket, key)
-            local_file_path = s3_to_local_path(
-                s3_file_path, base_local_dir=str(write_path)
-            )
-            os.makedirs(local_file_path.parent, exist_ok=True)
-            self.download_file(s3_file_path, local_file_path)
+            self.download_file(
+                s3_file_path, base_path=base_path
+            )  # Using the same base_path for file downloads
 
-        return local_directory_path
+        return PosixPath(local_directory_path)
 
-    def upload_file(
-        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
-    ) -> None:
-        if isinstance(write_path, S3Path):
-            try:
-                self.storage.upload_file(read_path, write_path.bucket, write_path.key)
-            except:
-                print(f"Failed to upload file {read_path} to {write_path}")
+    def upload_file(self, read_path: PosixPath, write_path: S3Path) -> None:
+        """Uploads a local file to S3."""
+        try:
+            self.storage.upload_file(str(read_path), write_path.bucket, write_path.key)
+        except Exception as e:  # Consider narrowing down the exceptions caught.
+            print(f"Failed to upload file {read_path} to {write_path}. Error: {e}")
 
-    def upload_directory(
-        self, read_path: PurePosixPath, write_path: Union[S3Path, PurePosixPath]
-    ) -> None:
-        files = [file for file in os.walk(read_path)]
+    def upload_directory(self, read_path: PosixPath, write_base_path: S3Path) -> None:
+        """Uploads a local directory to S3, maintaining its structure."""
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            futures = [
-                executor.submit(self.upload_file, file, write_path) for file in files
-            ]
-        for future in as_completed(futures):
-            future.result()
+            futures = []
+
+            for dirpath, _, filenames in os.walk(read_path):
+                for filename in filenames:
+                    local_file_path = PosixPath(dirpath).joinpath(filename)
+                    relative_path = local_file_path.relative_to(read_path)
+                    s3_path = write_base_path.joinpath(relative_path)
+
+                    futures.append(
+                        executor.submit(self.upload_file, local_file_path, s3_path)
+                    )
+
+            for future in as_completed(futures):
+                future.result()
 
 
-# TODO: Enable ingestion of chunks or entire ms, rebinning measurement_set could potentially be a list of ms
-# TODO: Refactor rebinning step in Lithops version, lua_file_path is not used,
-# it's directly loaded from the parameter_file_path should be checked if it exists or removed
-# TODO: DONE Enable dynamic loading/linking of the parameter files, this means creating them on runtime,
-# or downloading-modifying them also on runtime.
-# TODO: Check input parameters for the Pipeline class, not all of them are needed
-# TODO: Abstract parameter dict logic to a class, to handle S3 and posix fs.
-
-
-# Inputs:
-#   - measurement_set: path to the measurement set
-#   - parameter_file_path: path to the parameter file
-# Outputs:
-#   - write_path: creates a new measurement set in the write path
 class RebinningStep(PipelineStep):
     def __init__(
         self,
@@ -218,6 +206,35 @@ class RebinningStep(PipelineStep):
     @property
     def output(self) -> S3Path:
         return self._output
+
+    def _build_command(
+        self, ms: S3Path, parameters: str, calibrated_ms: S3Path
+    ) -> List[str]:
+        data_source = LithopsDataSource()
+        params = pickle.loads(parameters)
+        partition_path = data_source.download_directory(ms)
+        aoflag_path = data_source.download_file(params["flagrebin"]["aoflag.strategy"])
+        params["flagrebin"]["aoflag.strategy"] = aoflag_path
+        param_path = dict_to_parset(params["flagrebin"])
+        msout = str(partition_path).split("/")[-1]
+
+        cmd = [
+            "DP3",
+            str(param_path),
+            f"msin={partition_path}",
+            f"msout=/tmp/{msout}",
+            f"apply.parmdb={aoflag_path}",
+        ]
+
+        print("Command:", cmd)
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        stdout, stderr = proc.communicate()
+
+        calibrated_ms_path = data_source.upload_directory(
+            partition_path, S3Path(f"{calibrated_ms}/{msout}")
+        )
+
+        return calibrated_ms_path
 
     def run(self):
         extra_env = {"HOME": "/tmp"}
@@ -255,56 +272,15 @@ class RebinningStep(PipelineStep):
         }
 
         futures = function_executor.map(
-            self.build_command,
+            self._build_command,
             s3_paths,
             extra_env=extra_env,
         )
         results = function_executor.get_result(futures)
         return results
 
-    def build_command(
-        self, ms: S3Path, parameters: str, calibrated_ms: S3Path
-    ) -> List[str]:
-        data_source = LithopsDataSource()
-        params = pickle.loads(parameters)
-        partition_path = data_source.download_directory(ms)
-        param_path = dict_to_parset(params["flagrebin"])
-        aoflag_path = data_source.download_file(params["flagrebin"]["aoflag.strategy"])
-
-        cmd = [
-            "DP3",
-            param_path,
-            f"msin={partition_path}",
-            f"apply.parmdb={aoflag_path}",
-        ]
-
-        proc = sp.Popen(cmd)
-        print(partition_path)
-        print(param_path)
-        print(aoflag_path)
-
 
 if __name__ == "__main__":
-    # Pipeline
-    # Inputs:
-    #   - measurement_set: path to the measurement set
-    # Outputs:
-    #   - write_path: creates a new measurement set in the write path
-    # Obligatory parameters needed in the pipeline:
-    #   - measurement_set: path to the measurement set (uncalibrated).
-    #   - calibrated_measurement_set: path to the calibrated measurement set (where should rebinning write)
-    #   - image_output_path: path to the output directory where the .fits files will be saved
-    #   - parameter_file_path: path to the parameter file for each step
-
-    # Possible S3 Paths:
-    # remote_ms = "s3://aymanb-serverless-genomics/extract-data/partitions_60/SB205/SB205.MS"
-    # remote_lua_file_path = "s3://aymanb-serverless-genomics/extract-data/parameters/rebinning.lua"
-    # remote_sourcedb_directory = "s3://aymanb-serverless-genomics/extract-data/parameters/apparent.sourcedb"
-    # remote_calibrated_ms_imaging = "s3://aymanb-serverless-genomics/pipeline/SB205.ms"
-    # remote_image_output_path = "s3://aymanb-serverless-genomics/pipeline/OUTPUT/Cygloop-205-210-b0-1024
-
-    BUCKET_NAME = "aymanb-serverless-genomics"
-
     parameters = {
         "RebinningStep": {
             "input_data_path": {"ms": S3Path("/extract/partitions/partitions")},
@@ -323,16 +299,14 @@ if __name__ == "__main__":
                     "avg.timestep": 8,
                 }
             },
-            "output": {
-                "calibrated_ms": S3Path(
-                    "/aymanb-serverless-genomics/extract-data/rebinning_out/"
-                )
-            },
+            "output": {"calibrated_ms": S3Path("/extract/extract-data/rebinning_out/")},
         }
     }
 
-    RebinningStep(
-        input_data_path=parameters["RebinningStep"]["input_data_path"],
-        parameters=parameters["RebinningStep"]["parameters"],
-        output=parameters["RebinningStep"]["output"],
-    ).run()
+    print(
+        RebinningStep(
+            input_data_path=parameters["RebinningStep"]["input_data_path"],
+            parameters=parameters["RebinningStep"]["parameters"],
+            output=parameters["RebinningStep"]["output"],
+        ).run()
+    )
