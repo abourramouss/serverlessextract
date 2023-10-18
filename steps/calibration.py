@@ -1,112 +1,172 @@
-import subprocess
-from .step import Step
+import pickle
+import subprocess as sp
+from typing import Dict, List, Optional
+from s3path import S3Path
+from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
-from util import delete_all_in_cwd
-import os
-import time
-import shutil
+from util import dict_to_parset
 
 
-def remove(path):
-    """param <path> could either be relative or absolute."""
-    if os.path.isfile(path) or os.path.islink(path):
-        os.remove(path)  # remove the file
-    elif os.path.isdir(path):
-        shutil.rmtree(path)  # remove dir and all contains
-    else:
-        raise ValueError("file {} is not a file or dir.".format(path))
+class CalibrationStep(PipelineStep):
+    def __init__(
+        self,
+        input_data_path: Dict[str, S3Path],
+        parameters: Dict,
+        output: Optional[Dict[str, S3Path]] = None,
+    ):
+        super().__init__(input_data_path, parameters, output)
 
+    @property
+    def input_data_path(self) -> List[S3Path]:
+        return self._input_data_path
 
-class CalibrationStep(Step):
-    def __init__(self, calibration_file, skymodel_file, sourcedb_file):
-        self.skymodel_file = skymodel_file
-        self.sourcedb_file = sourcedb_file
-        self.calibration_file = calibration_file
+    @property
+    def parameters(self) -> Dict:
+        return self._parameters
 
-    def run(self, calibrated_mesurement_set: str, bucket_name: str, output_dir: str):
-        self.datasource = LithopsDataSource()
-        os.chdir(output_dir)
+    @property
+    def output(self) -> S3Path:
+        return self._output
 
-        calibrated_name = calibrated_mesurement_set.split("/")[-1]
-        calibrated_name = calibrated_name.split(".")[0]
-        output_h5 = f"{calibrated_name}.h5"
+    def build_command(
+        self, calibrated_ms: S3Path, parameters: str, h5: S3Path
+    ) -> List[str]:
+        data_source = LithopsDataSource()
+        params = pickle.loads(parameters)
+        cal_partition_path = data_source.download_directory(calibrated_ms)
+        sourcedb_dir = data_source.download_directory(params["cal"]["cal.sourcedb"])
+        params["cal"]["cal.sourcedb"] = sourcedb_dir
+        param_path = dict_to_parset(params["cal"])
 
-        curr_dir = os.getcwd()
-        os.chdir(f"/tmp/DATAREB")
-        os.chdir(curr_dir)
+        output_ms = str(cal_partition_path).split("/")[-1]
+        output_h5 = output_ms.replace(".ms", ".h5")
 
-        cmd = [
-            "DP3",
-            self.calibration_file,
-            f"msin={calibrated_mesurement_set}",
-            f"cal.h5parm=/tmp/DATAREB/{output_h5}",
-            f"cal.sourcedb={self.sourcedb_file}",
-        ]
-        print("Calibration step")
-        timing = self.execute_command(cmd, capture=False)
-        return {"result": calibrated_mesurement_set, "stats": {"execution": timing}}
-
-
-class SubtractionStep(Step):
-    def __init__(self, calibration_file, sourcedb_file):
-        self.calibration_file = calibration_file
-        self.source_db = sourcedb_file
-
-    def run(self, calibrated_mesurement_set: str, bucket_name: str, output_dir: str):
-        self.datasource = LithopsDataSource()
-        os.chdir(output_dir)
-
-        calibrated_name = calibrated_mesurement_set.split("/")[-1]
-        calibrated_name = calibrated_name.split(".")[0]
-        output_h5 = f"{calibrated_name}.h5"
+        print("Calibrated MS:", cal_partition_path)
+        print("Param path:", param_path)
+        print("Output H5:", output_h5)
+        print("SourceDB:", sourcedb_dir)
 
         cmd = [
             "DP3",
-            self.calibration_file,
-            f"msin={calibrated_mesurement_set}",
-            f"sub.applycal.parmdb=/tmp/DATAREB/{output_h5}",
-            f"sub.sourcedb={self.source_db}",
+            str(param_path),
+            f"msin={cal_partition_path}",
+            f"cal.h5parm=/tmp/{output_h5}",
+            f"cal.sourcedb={sourcedb_dir}",
         ]
 
-        print("Substraction calibration step")
-        timing = self.execute_command(cmd, capture=False)
-        return {"result": calibrated_mesurement_set, "stats": {"execution": timing}}
+        print("Command:", cmd)
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        stdout, stderr = proc.communicate()
 
-
-class ApplyCalibrationStep(Step):
-    def __init__(self, calibration_file):
-        self.calibration_file = calibration_file
-
-    def run(self, calibrated_mesurement_set: str, bucket_name: str, output_dir: str):
-        self.datasource = LithopsDataSource()
-        os.chdir(output_dir)
-
-        calibrated_name = calibrated_mesurement_set.split("/")[-1]
-        calibrated_name = calibrated_name.split(".")[0]
-        output_h5 = f"{calibrated_name}.h5"
-
-        cmd = [
-            "DP3",
-            self.calibration_file,
-            f"msin={calibrated_mesurement_set}",
-            f"apply.parmdb=/tmp/DATAREB/{output_h5}",
-        ]
-        print("Apply calibration step")
-        time = self.execute_command(cmd, capture=False)
-        upload_timing = self.datasource.upload(
-            bucket_name, "extract-data/step2c_out", calibrated_mesurement_set
+        data_source.upload_file(
+            f"/tmp/{output_h5}",
+            S3Path(f"{h5}/h5/{output_h5}"),
         )
 
-        # Clean up the /tmp/DATAREB directory, since all calibrated measurement sets are uploaded to oss
+        data_source.upload_directory(cal_partition_path, S3Path(f"{h5}/ms/{output_ms}"))
 
-        for filename in os.listdir("/tmp/DATAREB/"):
-            remove(os.path.join("/tmp/DATAREB/", filename))
+        return S3Path(f"{h5}/h5/{output_h5}"), S3Path(f"{h5}/ms/{output_ms}")
 
-        return {
-            "result": f"extract-data/step2c_out/{calibrated_name}.ms",
-            "stats": {
-                "execution": time,
-                "upload_time": upload_timing,
-                "upload_size": self.get_size(calibrated_mesurement_set),
-            },
-        }
+
+class SubstractionStep(PipelineStep):
+    def __init__(
+        self,
+        input_data_path: Dict[str, S3Path],
+        parameters: Dict,
+        output: Optional[Dict[str, S3Path]] = None,
+    ):
+        super().__init__(input_data_path, parameters, output)
+
+    @property
+    def input_data_path(self) -> List[S3Path]:
+        return self._input_data_path
+
+    @property
+    def parameters(self) -> Dict:
+        return self._parameters
+
+    @property
+    def output(self) -> S3Path:
+        return self._output
+
+    def build_command(
+        self, calibrated_ms: S3Path, parameters: str, substracted_ms: S3Path
+    ) -> List[str]:
+        data_source = LithopsDataSource()
+        params = pickle.loads(parameters)
+        cal_partition_path = data_source.download_directory(calibrated_ms)
+        sourcedb_dir = data_source.download_directory(params["sub"]["sub.sourcedb"])
+        params["sub"]["sub.sourcedb"] = sourcedb_dir
+        param_path = dict_to_parset(params["sub"])
+        h5_path = str(calibrated_ms).replace("ms", "h5")
+        output_h5 = data_source.download_file(S3Path(h5_path))
+        output_ms = str(calibrated_ms).split("/")[-1]
+
+        cmd = [
+            "DP3",
+            str(param_path),
+            f"msin={cal_partition_path}",
+            f"sub.applycal.parmdb={output_h5}",
+            f"sub.sourcedb={sourcedb_dir}",
+        ]
+        print(cmd)
+
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        stdout, stderr = proc.communicate()
+        print(stdout, stderr)
+
+        data_source.upload_directory(
+            cal_partition_path, S3Path(f"{substracted_ms}/ms/{output_ms}")
+        )
+
+
+class ApplyCalibrationStep(PipelineStep):
+    def __init__(
+        self,
+        input_data_path: Dict[str, S3Path],
+        parameters: Dict,
+        output: Optional[Dict[str, S3Path]] = None,
+    ):
+        super().__init__(input_data_path, parameters, output)
+
+    @property
+    def input_data_path(self) -> List[S3Path]:
+        return self._input_data_path
+
+    @property
+    def parameters(self) -> Dict:
+        return self._parameters
+
+    @property
+    def output(self) -> S3Path:
+        return self._output
+
+    def build_command(
+        self, calibrated_ms: S3Path, parameters: str, substracted_ms: S3Path
+    ) -> List[str]:
+        data_source = LithopsDataSource()
+        params = pickle.loads(parameters)
+        cal_partition_path = data_source.download_directory(calibrated_ms)
+        param_path = dict_to_parset(params["apply"])
+        h5_path = str(calibrated_ms).replace("ms", "h5")
+        h5_path = h5_path.replace("substraction_out", "calibration_out")
+        print("H5 path:", h5_path)
+        input_h5 = data_source.download_file(S3Path(h5_path))
+        output_ms = str(calibrated_ms).split("/")[-1]
+
+        cmd = [
+            "DP3",
+            str(param_path),
+            f"msin={cal_partition_path}",
+            f"apply.parmdb={input_h5}",
+        ]
+
+        print("command", cmd)
+
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        stdout, stderr = proc.communicate()
+        print(stdout, stderr)
+
+        data_source.upload_directory(
+            cal_partition_path, S3Path(f"{substracted_ms}/ms/{output_ms}")
+        )
