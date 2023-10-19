@@ -28,9 +28,7 @@ class CalibrationStep(PipelineStep):
     def output(self) -> S3Path:
         return self._output
 
-    def build_command(
-        self, calibrated_ms: S3Path, parameters: str, h5: S3Path
-    ) -> List[str]:
+    def build_command(self, calibrated_ms: S3Path, parameters: str, h5: S3Path):
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
         cal_partition_path = data_source.download_directory(calibrated_ms)
@@ -91,7 +89,7 @@ class SubstractionStep(PipelineStep):
 
     def build_command(
         self, calibrated_ms: S3Path, parameters: str, substracted_ms: S3Path
-    ) -> List[str]:
+    ):
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
         cal_partition_path = data_source.download_directory(calibrated_ms)
@@ -143,7 +141,7 @@ class ApplyCalibrationStep(PipelineStep):
 
     def build_command(
         self, calibrated_ms: S3Path, parameters: str, substracted_ms: S3Path
-    ) -> List[str]:
+    ):
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
         cal_partition_path = data_source.download_directory(calibrated_ms)

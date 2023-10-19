@@ -1,16 +1,13 @@
 from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
-from datasource import LithopsDataSource
+from steps.imaging import imaging
 from s3path import S3Path
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-
+import lithops
 
 if __name__ == "__main__":
     parameters = {
         "RebinningStep": {
-            "input_data_path": S3Path("/extract/partitions/partitions/"),
+            "input_data_path": S3Path("/extract/partitions/partitions_30/"),
             "parameters": {
                 "flagrebin": {
                     "steps": "[aoflag, avg, count]",
@@ -92,6 +89,11 @@ if __name__ == "__main__":
             },
             "output": S3Path("/extract/extract-data/applycal_out/"),
         },
+        "ImagingStep": {
+            "input_data_path": S3Path("/extract/extract-data/applycal_out/"),
+            "parameters": {},
+            "output": S3Path("/extract/extract-data/imaging_out/"),
+        },
     }
 
     RebinningStep(
@@ -117,3 +119,12 @@ if __name__ == "__main__":
         output=parameters["ApplyCalibrationStep"]["output"],
     ).run()
 
+    fexec = lithops.FunctionExecutor()
+    parameters = {
+        parameters["ImagingStep"]["input_data_path"],
+        parameters["ImagingStep"]["output"],
+    }
+    fexec.call_async(
+        imaging,
+        parameters,
+    )
