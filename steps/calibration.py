@@ -5,6 +5,9 @@ from s3path import S3Path
 from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
 from util import dict_to_parset
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CalibrationStep(PipelineStep):
