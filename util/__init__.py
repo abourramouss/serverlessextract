@@ -3,7 +3,5 @@ from .helpers import (
     dict_to_parset,
     setup_logging,
 )
-from .decorators import timeit_io, timeit_execution
-
 from .profiler import Profiler
 from .profilerplotter import ProfilerPlotter

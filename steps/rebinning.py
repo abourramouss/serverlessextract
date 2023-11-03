@@ -7,11 +7,8 @@ from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
 from util import dict_to_parset
 import logging
-import psutil
-import time
 from threading import Thread
 from util import Profiler
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -38,18 +35,28 @@ class RebinningStep(PipelineStep):
         return self._output
 
     def build_command(self, ms: S3Path, parameters: str, calibrated_ms: S3Path):
-        print(psutil.cpu_count())
-
         profiler = Profiler()
 
+        print(ms)
         # Start profiling the process using its PID
         monitoring_thread = Thread(target=profiler.start_profiling)
         monitoring_thread.start()
 
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
-        partition_path = data_source.download_directory(ms)
-        aoflag_path = data_source.download_file(params["flagrebin"]["aoflag.strategy"])
+
+        # Profile the download_directory method
+        partition_path = profiler.time_it(
+            "download_ms", data_source.download_directory, ms
+        )
+
+        # Profile the download_file method
+        aoflag_path = profiler.time_it(
+            "download_parameters",
+            data_source.download_file,
+            params["flagrebin"]["aoflag.strategy"],
+        )
+
         params["flagrebin"]["aoflag.strategy"] = aoflag_path
         param_path = dict_to_parset(params["flagrebin"])
         msout = str(partition_path).split("/")[-1]
@@ -64,13 +71,17 @@ class RebinningStep(PipelineStep):
 
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
-        stdout, stderr = proc.communicate()
+        # Profile the process execution
+        stdout, stderr = profiler.time_it("execute_script", proc.communicate)
 
-        print(stdout)
-        print(stderr)
-        data_source.upload_directory(
-            PosixPath(f"/tmp/{msout}"), S3Path(f"{calibrated_ms}/{msout}")
+        # Profile the upload_directory method
+        profiler.time_it(
+            "upload_rebinnedms",
+            data_source.upload_directory,
+            PosixPath(f"/tmp/{msout}"),
+            S3Path(f"{calibrated_ms}/{msout}"),
         )
+
         # Stop the profiler after the process completes
         profiler.stop_profiling()
         monitoring_thread.join()  # Ensure that the monitoring thread finishes
