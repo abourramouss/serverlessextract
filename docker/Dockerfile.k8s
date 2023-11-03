@@ -23,7 +23,8 @@ RUN pip install --upgrade setuptools six pip \
         ps-mem \
         tblib \
 		matplotlib \
-		psutil
+		psutil \
+		scipy \
 
 RUN apt-get update \
 	# Install necessary dependencies

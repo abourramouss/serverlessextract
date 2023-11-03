@@ -105,16 +105,17 @@ rebinning_profilers = RebinningStep(
     input_data_path=parameters["RebinningStep"]["input_data_path"],
     parameters=parameters["RebinningStep"]["parameters"],
     output=parameters["RebinningStep"]["output"],
-).run()
+).run(10)
 
 
-average_profiler = ProfilerPlotter.average(rebinning_profilers)
-ProfilerPlotter.plot(
-    average_profiler,
-    title="Average Profiler for Pipeline Step Rebinning",
-    filename="average_profiler_step_rebinning.png",
-)
+ProfilerPlotter.plot_average_profiler(rebinning_profilers, f"plots/")
+ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, f"plots/")
+ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, f"plots/")
+ProfilerPlotter.plot_gantt(rebinning_profilers, "plots/")
+
 """
+
+
 CalibrationStep(
     input_data_path=parameters["CalibrationStep"]["input_data_path"],
     parameters=parameters["CalibrationStep"]["parameters"],

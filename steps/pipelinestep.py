@@ -35,29 +35,32 @@ class PipelineStep(ABC):
     def build_command(self, *args, **kwargs):
         pass
 
-    def run(self):
+    def run(self, func_limit: int):
         extra_env = {"HOME": "/tmp"}
         function_executor = lithops.FunctionExecutor()
 
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
-            prefix=self.input_data_path.key,
+            prefix=f"{self.input_data_path.key}/",
         )
-
+        print(f"{self.input_data_path.key}/")
         # Create an empty set to hold unique directories
         unique_partitions = set()
+
+        partition_subset = 0
 
         # Iterate over each key
         for key in keys:
             # Split the key into its parts
             parts = key.split("/")
-
             # Extract the directory that ends in .ms
             partition = next((part for part in parts if part.endswith(".ms")), None)
-            if partition:
+            if partition and partition_subset < func_limit:
                 # Combine the prefix with the partition
+
                 full_partition_path = "/".join(parts[: parts.index(partition) + 1])
                 unique_partitions.add(full_partition_path)
+                partition_subset = len(unique_partitions)
 
         s3_paths = {
             (
@@ -69,7 +72,6 @@ class PipelineStep(ABC):
             )
             for partition in unique_partitions
         }
-
         futures = function_executor.map(
             self.build_command,
             s3_paths,
