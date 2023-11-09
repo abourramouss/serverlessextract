@@ -57,6 +57,7 @@ class CalibrationStep(PipelineStep):
 
         print("Command:", cmd)
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+
         stdout, stderr = proc.communicate()
 
         data_source.upload_file(

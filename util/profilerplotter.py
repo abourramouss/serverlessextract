@@ -79,19 +79,19 @@ class ProfilerPlotter:
                 "g",
             ),
             (
-                "Disk Read Rate (MB/s)",
-                [profiler.disk_read_rate_mb for profiler in profilers],
+                "Disk Read Rate (MB)",
+                [profiler.disk_read for profiler in profilers],
                 "r",
             ),
             (
-                "Disk Write Rate (MB/s)",
-                [profiler.disk_write_rate_mb for profiler in profilers],
+                "Disk Write Rate (MB)",
+                [profiler.disk_write for profiler in profilers],
                 "c",
             ),
-            ("MB sent (MB/s)", [profiler.bytes_sent for profiler in profilers], "m"),
+            ("MB sent (MB)", [profiler.net_write for profiler in profilers], "m"),
             (
-                "MB recieved (MB/s)",
-                [profiler.bytes_recv for profiler in profilers],
+                "MB recieved (MB)",
+                [profiler.net_read for profiler in profilers],
                 "y",
             ),
         ]
@@ -135,7 +135,7 @@ class ProfilerPlotter:
             os.makedirs(save_dir)
 
         # Save the plot
-        save_path = os.path.join(save_dir, "combined_metrics.png")
+        save_path = os.path.join(save_dir, "averaged_metrics.png")
         plt.savefig(save_path, bbox_inches="tight")
         print(f"Plot saved to: {save_path}")
 
@@ -149,15 +149,15 @@ class ProfilerPlotter:
             ("CPU Usage (%)", [profiler.cpu_percent for profiler in profilers]),
             ("Memory Used (MB)", [profiler.memory_used_mb for profiler in profilers]),
             (
-                "Disk Read Rate (MB/s)",
-                [profiler.disk_read_rate_mb for profiler in profilers],
+                "Disk Read Rate (MB)",
+                [profiler.disk_read for profiler in profilers],
             ),
             (
-                "Disk Write Rate (MB/s)",
-                [profiler.disk_write_rate_mb for profiler in profilers],
+                "Disk Write Rate (MB)",
+                [profiler.disk_write for profiler in profilers],
             ),
-            ("MB sent (MB/s)", [profiler.bytes_sent for profiler in profilers]),
-            ("MB received (MB/s)", [profiler.bytes_recv for profiler in profilers]),
+            ("MB sent (MB)", [profiler.net_write for profiler in profilers]),
+            ("MB received (MB)", [profiler.net_read for profiler in profilers]),
         ]
 
         plt.figure(figsize=(20, 30))
@@ -221,17 +221,16 @@ class ProfilerPlotter:
             ("CPU Usage (%)", [profiler.cpu_percent for profiler in profilers]),
             ("Memory Used (MB)", [profiler.memory_used_mb for profiler in profilers]),
             (
-                "Disk Read Rate (MB/s)",
-                [profiler.disk_read_rate_mb for profiler in profilers],
+                "Disk Read Rate (MB)",
+                [profiler.disk_read for profiler in profilers],
             ),
             (
-                "Disk Write Rate (MB/s)",
-                [profiler.disk_write_rate_mb for profiler in profilers],
+                "Disk Write Rate (MB)",
+                [profiler.disk_write for profiler in profilers],
             ),
-            ("MB sent (MB/s)", [profiler.bytes_sent for profiler in profilers]),
-            ("MB received (MB/s)", [profiler.bytes_recv for profiler in profilers]),
+            ("MB sent (MB)", [profiler.net_write for profiler in profilers]),
+            ("MB received (MB)", [profiler.net_read for profiler in profilers]),
         ]
-
         plt.figure(figsize=(20, 30))
         plt.suptitle("Aggregated Resource Usage", fontsize=20, y=1.03)
 
@@ -269,7 +268,7 @@ class ProfilerPlotter:
             os.makedirs(save_dir)
 
         # Save the plot
-        save_path = os.path.join(save_dir, "aggregated_total_metrics.png")
+        save_path = os.path.join(save_dir, "aggregated_sum.png")
         plt.savefig(save_path, bbox_inches="tight")
         print(f"Plot saved to: {save_path}")
 

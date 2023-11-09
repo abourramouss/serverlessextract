@@ -106,27 +106,24 @@ class Partitioner:
 
 
 if __name__ == "__main__":
-    partitions = 5
+    partitions = 10
     p = Partitioner("/home/lab144/ayman/extract-project/SB205.MS")
     total_partitions = p.partition_chunks(partitions)
     print(f"Total partitions created: {total_partitions}")
-
-    """
-    upload_directory_to_s3(
-        "partitions",
-        "ayman-extract",
-        f"partitions/partitions_{partitions}",
-    )
-    """
-
-    # After uploading, delete the contents of the partitions directory
+    # List the partition directories after partitioning is complete
     dir_partitions = os.listdir("partitions")
-
+    # Zip each partition directory
     for partition in dir_partitions:
-        remove(f"partitions/{partition}")
-    for p in dir_partitions:
-        zip_directory_without_compression(f"partitions/{p}", f"partitions/{p}.zip")
+        partition_dir = f"partitions/{partition}"
+        if os.path.isdir(partition_dir):  # Make sure it's a directory
+            zip_directory_without_compression(partition_dir, f"{partition_dir}.zip")
 
+    # Now that each partition is zipped, you can remove the directories
+    for partition in dir_partitions:
+        partition_dir = f"partitions/{partition}"
+        remove(partition_dir)
+
+    # Finally, upload to S3
     upload_directory_to_s3(
         "partitions",
         "ayman-extract",

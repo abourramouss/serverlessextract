@@ -47,6 +47,7 @@ class LithopsDataSource(DataSource):
     ) -> PosixPath:
         """Download a directory from S3 and returns the local path."""
         keys = self.storage.list_keys(read_path.bucket, prefix=read_path.key)
+        print(keys)
         local_directory_path = s3_to_local_path(
             read_path, base_local_dir=str(base_path)
         )
