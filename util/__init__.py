@@ -3,5 +3,5 @@ from .helpers import (
     dict_to_parset,
     setup_logging,
 )
-from .profiler import Profiler
+from .profiler import Profiler, profiling_context
 from .profilerplotter import ProfilerPlotter

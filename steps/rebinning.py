@@ -7,10 +7,30 @@ from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
 from util import dict_to_parset
 import logging
-from threading import Thread
 from util import Profiler
+import os
+from multiprocessing import Process, Pipe
+import time
 
 logger = logging.getLogger(__name__)
+
+
+def time_it(label, function, time_records, *args, **kwargs):
+    print(f"label: {label}, type of function: {type(function)}")
+
+    start_time = time.time()
+    result = function(*args, **kwargs)
+    end_time = time.time()
+
+    record = {
+        "label": label,
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration": (end_time - start_time),
+    }
+    time_records.append(record)
+
+    return result
 
 
 class RebinningStep(PipelineStep):
@@ -34,56 +54,60 @@ class RebinningStep(PipelineStep):
     def output(self) -> S3Path:
         return self._output
 
-    def build_command(self, ms: S3Path, parameters: str, calibrated_ms: S3Path):
-        profiler = Profiler()
+    def build_command(self, ms: S3Path, parameters: str, output_ms: S3Path):
+        working_dir = PosixPath(
+            os.getenv("HOME")
+        )  # this is set to /tmp, to respect lambda convention
 
-        print(ms)
-        # Start profiling the process using its PID
-        monitoring_thread = Thread(target=profiler.start_profiling)
-        monitoring_thread.start()
+        time_records = []
 
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
 
         # Profile the download_directory method
-        partition_path = profiler.time_it(
-            "download_ms", data_source.download_directory, ms
+        partition_path = time_it(
+            "download_ms", data_source.download_directory, time_records, ms
         )
+        partition_path = time_it(
+            "unzip", data_source.unzip, time_records, partition_path
+        )
+        ms_name = str(partition_path).split("/")[-1]
 
         # Profile the download_file method
-        aoflag_path = profiler.time_it(
+        aoflag_path = time_it(
             "download_parameters",
             data_source.download_file,
+            time_records,
             params["flagrebin"]["aoflag.strategy"],
         )
 
         params["flagrebin"]["aoflag.strategy"] = aoflag_path
         param_path = dict_to_parset(params["flagrebin"])
-        msout = str(partition_path).split("/")[-1]
+
+        msout = f"{working_dir}/{ms_name}"
 
         cmd = [
             "DP3",
             str(param_path),
             f"msin={partition_path}",
-            f"msout=/tmp/{msout}",
+            f"msout={msout}",
             f"aoflag.strategy={aoflag_path}",
         ]
 
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
         # Profile the process execution
-        stdout, stderr = profiler.time_it("execute_script", proc.communicate)
+        time_it("execute_script", proc.communicate, time_records)
 
+        posix_source = time_it("zip", data_source.zip, time_records, PosixPath(msout))
+        print(msout)
         # Profile the upload_directory method
-        profiler.time_it(
+        time_it(
             "upload_rebinnedms",
-            data_source.upload_directory,
-            PosixPath(f"/tmp/{msout}"),
-            S3Path(f"{calibrated_ms}/{msout}"),
+            data_source.upload_file,
+            time_records,
+            posix_source,
+            S3Path(f"{output_ms}/{ms_name}.zip"),
         )
 
-        # Stop the profiler after the process completes
-        profiler.stop_profiling()
-        monitoring_thread.join()  # Ensure that the monitoring thread finishes
-
-        return profiler
+        return time_records

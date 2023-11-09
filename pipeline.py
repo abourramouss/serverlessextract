@@ -12,7 +12,7 @@ setup_logging(logging.INFO)
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_10/"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_10zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -105,8 +105,9 @@ rebinning_profilers = RebinningStep(
     input_data_path=parameters["RebinningStep"]["input_data_path"],
     parameters=parameters["RebinningStep"]["parameters"],
     output=parameters["RebinningStep"]["output"],
-).run(10)
+).run(1)
 
+print(rebinning_profilers[0])
 
 ProfilerPlotter.plot_average_profiler(rebinning_profilers, f"plots/")
 ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, f"plots/")
@@ -114,7 +115,6 @@ ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, f"plots/")
 ProfilerPlotter.plot_gantt(rebinning_profilers, "plots/")
 
 """
-
 
 CalibrationStep(
     input_data_path=parameters["CalibrationStep"]["input_data_path"],
