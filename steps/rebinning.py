@@ -7,9 +7,7 @@ from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
 from util import dict_to_parset
 import logging
-from util import Profiler
 import os
-from multiprocessing import Process, Pipe
 import time
 
 logger = logging.getLogger(__name__)

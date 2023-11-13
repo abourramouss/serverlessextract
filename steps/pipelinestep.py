@@ -51,13 +51,14 @@ class PipelineStep(ABC):
     def run(self, func_limit: int):
         extra_env = {"HOME": "/tmp"}
         function_executor = lithops.FunctionExecutor()
-
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
             prefix=f"{self.input_data_path.key}/",
         )
-        keys = keys[0:func_limit]
+        if f"{self.input_data_path.key}/" in keys:
+            keys.remove(f"{self.input_data_path.key}/")
 
+        keys = keys[0:func_limit]
         s3_paths = [
             (
                 S3Path.from_bucket_key(
@@ -68,6 +69,7 @@ class PipelineStep(ABC):
             )
             for partition in keys
         ]
+
         futures = function_executor.map(
             self._execute_step,
             s3_paths,

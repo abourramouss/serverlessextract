@@ -5,7 +5,6 @@ import sys
 import cProfile
 import psutil
 import matplotlib.pyplot as plt
-from memory_profiler import profile
 import time
 from pathlib import PosixPath
 from datasource import LithopsDataSource
@@ -89,7 +88,6 @@ def run_command_and_stream_output(command):
         sys.stderr.write(errs)
 
 
-@profile
 def imaging(input_data_path: S3Path, output_path: S3Path):
     data_source = LithopsDataSource()
     cal_partition_path = data_source.download_directory(input_data_path)

@@ -1,5 +1,5 @@
-# Python 3.8
-FROM python:3.8
+# Python 3.10
+FROM python:3.10
 
 RUN apt-get update \
 	# Install necessary dependencies
@@ -93,7 +93,8 @@ RUN pip install --upgrade --ignore-installed pip wheel setuptools \
 	cloudpickle \
 	ps-mem \
 	tblib \
-	psutil
+	psutil \
+	s3path
 
 WORKDIR ${FUNCTION_DIR}
 
