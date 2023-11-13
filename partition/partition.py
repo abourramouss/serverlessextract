@@ -106,10 +106,11 @@ class Partitioner:
 
 
 if __name__ == "__main__":
-    partitions = 10
-    p = Partitioner("/home/lab144/ayman/extract-project/SB205.MS")
+    partitions = 7
+
+    p = Partitioner("/home/ayman/Downloads/entire_ms/SB205.MS")
     total_partitions = p.partition_chunks(partitions)
-    print(f"Total partitions created: {total_partitions}")
+    print(f"Total partitions created: {total_partitions+1}")
     # List the partition directories after partitioning is complete
     dir_partitions = os.listdir("partitions")
     # Zip each partition directory

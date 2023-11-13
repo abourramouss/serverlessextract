@@ -12,7 +12,7 @@ setup_logging(logging.INFO)
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_10zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
