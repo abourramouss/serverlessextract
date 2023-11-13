@@ -24,7 +24,5 @@ def upload_directory_to_s3(local_directory, bucket, s3_prefix):
             )
             file_list.append((local_file_path, bucket, s3_key))
 
-    pool = Pool()
-    pool.map(upload_file, file_list)
-    pool.close()
-    pool.join()
+    for file in file_list:
+        upload_file(file)

@@ -1,45 +1,111 @@
-import subprocess
-from .step import Step
+import pickle
+import subprocess as sp
+from pathlib import PosixPath
+from typing import Dict, List, Optional
+from s3path import S3Path
+from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
-from datasource import DataSource
+from util import dict_to_parset
+import logging
 import os
-from util import delete_all_in_cwd
+import time
+
+logger = logging.getLogger(__name__)
 
 
-class RebinningStep(Step):
-    def __init__(self, parameter_file, lua_file):
-        self.parameter_file = parameter_file
-        self.lua_file = lua_file
+def time_it(label, function, time_records, *args, **kwargs):
+    print(f"label: {label}, type of function: {type(function)}")
 
-    def run(self, measurement_set: str, bucket_name: str, output_dir: str):
-        os.chdir(output_dir)
-        os.makedirs("DATAREB", exist_ok=True)
+    start_time = time.time()
+    result = function(*args, **kwargs)
+    end_time = time.time()
 
-        measurement_set_name = measurement_set.split("/")[-1]
-        output_path = f"/tmp/DATAREB/cal_{measurement_set_name}"
+    record = {
+        "label": label,
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration": (end_time - start_time),
+    }
+    time_records.append(record)
 
-        # First download the measurement set and the parameters needed
-        download_timing_1 = self.datasource.download(
-            bucket_name, measurement_set, output_dir
+    return result
+
+
+class RebinningStep(PipelineStep):
+    def __init__(
+        self,
+        input_data_path: Dict[str, S3Path],
+        parameters: Dict,
+        output: Optional[Dict[str, S3Path]] = None,
+    ):
+        super().__init__(input_data_path, parameters, output)
+
+    @property
+    def input_data_path(self) -> List[S3Path]:
+        return self._input_data_path
+
+    @property
+    def parameters(self) -> Dict:
+        return self._parameters
+
+    @property
+    def output(self) -> S3Path:
+        return self._output
+
+    def build_command(self, ms: S3Path, parameters: str, output_ms: S3Path):
+        working_dir = PosixPath(
+            os.getenv("HOME")
+        )  # this is set to /tmp, to respect lambda convention
+
+        time_records = []
+
+        data_source = LithopsDataSource()
+        params = pickle.loads(parameters)
+
+        # Profile the download_directory method
+        partition_path = time_it(
+            "download_ms", data_source.download_directory, time_records, ms
+        )
+        partition_path = time_it(
+            "unzip", data_source.unzip, time_records, partition_path
+        )
+        ms_name = str(partition_path).split("/")[-1]
+
+        # Profile the download_file method
+        aoflag_path = time_it(
+            "download_parameters",
+            data_source.download_file,
+            time_records,
+            params["flagrebin"]["aoflag.strategy"],
         )
 
-        download_timing_2 = self.datasource.download(
-            bucket_name, f"extract-data/parameters", output_dir
-        )
+        params["flagrebin"]["aoflag.strategy"] = aoflag_path
+        param_path = dict_to_parset(params["flagrebin"])
+
+        msout = f"{working_dir}/{ms_name}"
 
         cmd = [
             "DP3",
-            self.parameter_file,
-            f"msin={measurement_set}",
-            f"msout={output_path}",
+            str(param_path),
+            f"msin={partition_path}",
+            f"msout={msout}",
+            f"aoflag.strategy={aoflag_path}",
         ]
-        print("Rebinning step")
-        timing = self.execute_command(cmd, capture=False)
-        return {
-            "result": output_path,
-            "stats": {
-                "execution": timing,
-                "download_time": download_timing_1 + download_timing_2,
-                "download_size": self.get_size(measurement_set),
-            },
-        }
+
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+
+        # Profile the process execution
+        time_it("execute_script", proc.communicate, time_records)
+
+        posix_source = time_it("zip", data_source.zip, time_records, PosixPath(msout))
+        print(msout)
+        # Profile the upload_directory method
+        time_it(
+            "upload_rebinnedms",
+            data_source.upload_file,
+            time_records,
+            posix_source,
+            S3Path(f"{output_ms}/{ms_name}.zip"),
+        )
+
+        return time_records
