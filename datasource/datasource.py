@@ -31,19 +31,23 @@ class DataSource(ABC):
 
     def zip(self, ms: PosixPath) -> PosixPath:
         print(f"Zipping directory: {ms}")
-        zip_filepath = PosixPath(f"{ms}.zip")  # This is the file path for the new zip file
+        zip_filepath = PosixPath(
+            f"{ms}.zip"
+        )  # This is the file path for the new zip file
         with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for root, dirs, files in os.walk(ms):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    zip_file.write(file_path, os.path.relpath(file_path, start=ms.parent))
+                    zip_file.write(
+                        file_path, os.path.relpath(file_path, start=ms.parent)
+                    )
         return zip_filepath
 
     def unzip(self, ms: PosixPath) -> PosixPath:
         zip_file = zipfile.ZipFile(ms)
-        part_name = ms.name.split(".")[0]
-        print(f"part_name: {part_name}")
-        extract_path = PosixPath(f"{ms.parent}/{part_name}.ms")
+        extract_path = PosixPath(ms.parent)
+        print(f"Extracting {ms} to {ms.parent}")
         zip_file.extractall(extract_path)
         zip_file.close()
-        return extract_path
+        unzipped_path = extract_path / ms.stem
+        return unzipped_path

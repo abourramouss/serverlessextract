@@ -6,6 +6,24 @@ from multiprocessing import Process, Pipe
 import contextlib
 
 
+def time_it(label, function, time_records, *args, **kwargs):
+    print(f"label: {label}, type of function: {type(function)}")
+
+    start_time = time.time()
+    result = function(*args, **kwargs)
+    end_time = time.time()
+
+    record = {
+        "label": label,
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration": (end_time - start_time),
+    }
+    time_records.append(record)
+
+    return result
+
+
 @contextlib.contextmanager
 def profiling_context():
     parent_conn, child_conn = Pipe()
