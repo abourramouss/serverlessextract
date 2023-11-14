@@ -100,7 +100,7 @@ parameters = {
     },
 }
 
-
+"""
 rebinning_profilers = RebinningStep(
     input_data_path=parameters["RebinningStep"]["input_data_path"],
     parameters=parameters["RebinningStep"]["parameters"],
@@ -109,25 +109,36 @@ rebinning_profilers = RebinningStep(
 
 print(rebinning_profilers[0])
 
-ProfilerPlotter.plot_average_profiler(rebinning_profilers, f"plots/")
-ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, f"plots/")
-ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, f"plots/")
-ProfilerPlotter.plot_gantt(rebinning_profilers, "plots/")
+ProfilerPlotter.plot_average_profiler(rebinning_profilers, f"plots/reb")
+ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, f"plots/reb")
+ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, f"plots/reb")
+ProfilerPlotter.plot_gantt(rebinning_profilers, "plots/reb")
+
 
 """
 
-CalibrationStep(
+calibration_profilers = CalibrationStep(
     input_data_path=parameters["CalibrationStep"]["input_data_path"],
     parameters=parameters["CalibrationStep"]["parameters"],
     output=parameters["CalibrationStep"]["output"],
-).run()
+).run(1)
 
+
+ProfilerPlotter.plot_average_profiler(calibration_profilers, f"plots/cal")
+ProfilerPlotter.plot_aggregated_profiler(calibration_profilers, f"plots/cal")
+ProfilerPlotter.plot_aggregated_sum_profiler(calibration_profilers, f"plots/cal")
+ProfilerPlotter.plot_gantt(calibration_profilers, "plots/cal")
+
+"""
 SubstractionStep(
     input_data_path=parameters["SubstractionStep"]["input_data_path"],
     parameters=parameters["SubstractionStep"]["parameters"],
     output=parameters["SubstractionStep"]["output"],
-).run()
+).run(1)
 
+"""
+
+"""
 ApplyCalibrationStep(
     input_data_path=parameters["ApplyCalibrationStep"]["input_data_path"],
     parameters=parameters["ApplyCalibrationStep"]["parameters"],
