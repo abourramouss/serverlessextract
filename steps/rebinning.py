@@ -5,11 +5,31 @@ from typing import Dict, List, Optional
 from s3path import S3Path
 from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
-from util import dict_to_parset, time_it
+from util import dict_to_parset
 import logging
 import os
+import time
+import shutil
 
 logger = logging.getLogger(__name__)
+
+
+def time_it(label, function, time_records, *args, **kwargs):
+    print(f"label: {label}, type of function: {type(function)}")
+
+    start_time = time.time()
+    result = function(*args, **kwargs)
+    end_time = time.time()
+
+    record = {
+        "label": label,
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration": (end_time - start_time),
+    }
+    time_records.append(record)
+
+    return result
 
 
 class RebinningStep(PipelineStep):
@@ -50,6 +70,9 @@ class RebinningStep(PipelineStep):
         partition_path = time_it(
             "unzip", data_source.unzip, time_records, partition_path
         )
+
+        print("Partition path:", partition_path)
+        print(os.listdir(str(partition_path)))
         ms_name = str(partition_path).split("/")[-1]
 
         # Profile the download_file method
@@ -77,7 +100,8 @@ class RebinningStep(PipelineStep):
 
         # Profile the process execution
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
-
+        print(stdout)
+        print(stderr)
         posix_source = time_it("zip", data_source.zip, time_records, PosixPath(msout))
         print(msout)
         # Profile the upload_directory method
@@ -88,5 +112,12 @@ class RebinningStep(PipelineStep):
             posix_source,
             S3Path(f"{output_ms}/{ms_name}.zip"),
         )
+
+        shutil.rmtree(partition_path)
+        shutil.rmtree(msout)
+        # Delete the zipped ms file if it's a file and not a directory
+        zipped_ms_path = f"{output_ms}/{ms_name}.zip"  # adjust the path as necessary
+        if os.path.isfile(zipped_ms_path):
+            os.remove(zipped_ms_path)
 
         return time_records
