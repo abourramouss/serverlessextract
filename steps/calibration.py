@@ -38,13 +38,23 @@ class CalibrationStep(PipelineStep):
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
         time_records = []
+        output_h5 = f"{working_dir}/output.h5"
 
         cal_partition_path = time_it(
-            "download_ms", data_source.download_directory, time_records, calibrated_ms
+            "download_ms",
+            data_source.download_file,
+            time_records,
+            calibrated_ms,
+            working_dir,
         )
+
+        print("before cal partition path:", cal_partition_path)
         cal_partition_path = time_it(
             "unzip", data_source.unzip, time_records, cal_partition_path
         )
+
+        print("Calibrated partition path:", cal_partition_path)
+        print(os.listdir(str(cal_partition_path)))
 
         sourcedb_dir = time_it(
             "download_parameters",
@@ -55,15 +65,13 @@ class CalibrationStep(PipelineStep):
         params["cal"]["cal.sourcedb"] = sourcedb_dir
         param_path = dict_to_parset(params["cal"])
 
-        print("cal partition path:", cal_partition_path)
-        output_h5 = cal_partition_path.replace("ms", "h5")
         print("Output H5:", output_h5)
 
         cmd = [
             "DP3",
             str(param_path),
             f"msin={cal_partition_path}",
-            f"cal.h5parm={working_dir}/{output_h5}",
+            f"cal.h5parm={output_h5}",
             f"cal.sourcedb={sourcedb_dir}",
         ]
 
@@ -71,36 +79,22 @@ class CalibrationStep(PipelineStep):
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
+        print(stdout, stderr)
 
-        # Zip the two files together and send them to s3 (h5 and ms)
+        # Assuming output_h5_path is the path to the .h5 file
+        output_h5_path = PosixPath(output_h5)
+        # Zip the .h5 file and .ms directory together
+        combined_zip = data_source.zip_files(cal_partition_path, output_h5_path)
 
-        # Upload h5 file
+        # Upload the combined zip file
         time_it(
-            "upload_h5",
+            "upload_combined",
             data_source.upload_file,
             time_records,
-            f"/tmp/{output_h5}",
-            S3Path(f"{h5}/h5/{output_h5}"),
+            combined_zip,
+            S3Path(f"{h5}/{combined_zip.name}"),
         )
 
-        # Zip ms directory
-        cal_zip = time_it("zip", data_source.zip, time_records, cal_partition_path)
-
-        # Upload ms zipped
-        time_it(
-            "upload_calibratedms",
-            data_source.upload_file,
-            time_records,
-            cal_zip,
-            S3Path(f"{h5}/ms/{output_ms}.zip"),
-        )
-        """return (
-            time_records,
-            S3Path(f"{h5}/h5/{output_h5}"),
-            S3Path(f"{h5}/ms/{output_ms}"),
-        )
-
-        """
         return time_records
 
 
@@ -133,13 +127,26 @@ class SubstractionStep(PipelineStep):
         params = pickle.loads(parameters)
 
         print("Calibrated MS:", calibrated_ms)
-        cal_partition_path = time_it(
-            "download_ms", data_source.download_directory, time_records, calibrated_ms
+        cal_combined_path = time_it(
+            "download_combined",
+            data_source.download_directory,
+            time_records,
+            calibrated_ms,
         )
-        cal_partition_path = time_it(
-            "unzip", data_source.unzip, time_records, cal_partition_path
+        cal_combined_path = time_it(
+            "unzip", data_source.unzip, time_records, cal_combined_path
         )
+        print("Calibrated combined path:")
 
+        print(
+            "Calibrated combined path:",
+            os.listdir("/tmp/ayman-extract/extract-data/calibration_out/"),
+        )
+        # Extracting paths for .ms and .h5 from the unzipped combined folder
+        cal_partition_path = cal_combined_path / "ms"
+        h5_path = cal_combined_path / "h5"
+        print("Calibrated partition path")
+        print(cal_partition_path, h5_path)
         sourcedb_dir = time_it(
             "download_parameters_1",
             data_source.download_directory,
@@ -148,10 +155,11 @@ class SubstractionStep(PipelineStep):
         )
         params["sub"]["sub.sourcedb"] = sourcedb_dir
         param_path = dict_to_parset(params["sub"])
-        h5_path = str(calibrated_ms).replace("ms", "h5")
-        output_h5 = time_it(
-            "time_records_2", data_source.download_file, time_records, S3Path(h5_path)
-        )
+
+        # Assuming there is only one .h5 file in the 'h5' directory
+        print("H5 path")
+        print(os.listdir(str(h5_path)))
+        output_h5 = str(f"{h5_path}/output.h5")
         output_ms = str(calibrated_ms).split("/")[-1]
 
         cmd = [

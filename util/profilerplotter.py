@@ -276,7 +276,7 @@ class ProfilerPlotter:
     def plot_gantt(profilers, save_dir):
         fig, ax = plt.subplots(figsize=(10, len(profilers) + 2))
 
-        # Sort profilers based on start time, 0 has the lowest start time
+        # Sort profilers based on start time
         profilers = sorted(profilers, key=lambda p: p.time_records[0]["start_time"])
 
         pastel_colors = [
@@ -288,43 +288,62 @@ class ProfilerPlotter:
             "#a8e6ce",
         ]
 
+        max_duration = max(
+            [
+                record["duration"]
+                for profiler in profilers
+                for record in profiler.time_records
+            ]
+        )
+        min_text_size = 8
+        max_text_size = 12
         for idx, profiler in enumerate(profilers):
-            previous_end_time = 0  # This will hold the end time of the previous task
+            previous_end_time = 0  # Hold the end time of the previous task
 
             for i, record in enumerate(profiler.time_records):
-                # If it's not the first record, adjust the relative start time based on the previous task's end time
-                if i > 0:
-                    relative_start_time = (
-                        previous_end_time - profilers[0].time_records[0]["start_time"]
-                    )
-                else:
-                    relative_start_time = (
-                        record["start_time"]
-                        - profilers[0].time_records[0]["start_time"]
-                    )
-
+                relative_start_time = (
+                    record["start_time"] - profilers[0].time_records[0]["start_time"]
+                )
                 previous_end_time = record["end_time"]
-
                 duration = record["duration"]
+
+                # Color for each bar
+                color = pastel_colors[i % len(pastel_colors)]
                 ax.barh(
                     idx,
                     duration,
                     left=relative_start_time,
-                    color=pastel_colors[i % len(pastel_colors)],
+                    color=color,
                     edgecolor="white",
                     height=0.5,
                 )
 
-                segment_center = relative_start_time + duration / 2
-                ax.text(
-                    segment_center,
-                    idx,
-                    f"{record['label']}\n{duration:.2f}s",
-                    ha="center",
-                    va="center",
-                    fontsize=8,
-                    color="black",
+                # Adjust text size based on duration
+                text_size_ratio = duration / max_duration
+                text_size = max(
+                    min_text_size,
+                    min(
+                        max_text_size,
+                        min_text_size
+                        + (max_text_size - min_text_size) * text_size_ratio,
+                    ),
                 )
+                segment_center = relative_start_time + duration / 2
+                vertical_offset = (
+                    0.05 * (i % 2) * (-1) ** idx
+                )  # Stagger text vertically
+
+                # Display text only if there's enough space
+                if duration > 0.02 * max_duration:
+                    ax.text(
+                        segment_center,
+                        idx + vertical_offset,
+                        f"{duration:.2f}s",
+                        ha="center",
+                        va="center",
+                        fontsize=text_size,
+                        color="black",
+                    )
 
         ax.set_yticks(range(len(profilers)))
         ax.set_yticklabels([f"Worker {i+1}" for i in range(len(profilers))])
@@ -332,16 +351,18 @@ class ProfilerPlotter:
         ax.set_xlabel("Execution Time (s)")
         ax.set_ylabel("Profiler (Workers)")
         ax.set_title("Gantt plot")
+
+        # Move the legend outside the plot
         ax.legend(
-            [rec["label"] for rec in profilers[0].time_records], loc="upper right"
+            [rec["label"] for rec in profilers[0].time_records],
+            loc="upper left",
+            bbox_to_anchor=(1, 1),
         )
 
         plt.tight_layout()
-        # Ensure the directory exists
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
-        # Save the plot
         save_path = os.path.join(save_dir, "gantt.png")
         plt.savefig(save_path, bbox_inches="tight")
         print(f"Plot saved to: {save_path}")

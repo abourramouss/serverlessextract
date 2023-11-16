@@ -12,7 +12,7 @@ setup_logging(logging.INFO)
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_61zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -99,23 +99,33 @@ parameters = {
         "output_path": S3Path("/ayman-extract/extract-data/imaging_out/"),
     },
 }
+"""
+
+runtime_memory = [1769, 3538, 5307, 7076, 8845, 10000]
+for i, p in enumerate([7]):
+    for e in runtime_memory[0 : len(runtime_memory) - i]:
+        print(p, e)
+        rebinning_profilers = RebinningStep(
+            input_data_path=S3Path(f"/ayman-extract/partitions/partitions_{p}zip"),
+            parameters=parameters["RebinningStep"]["parameters"],
+            output=parameters["RebinningStep"]["output"],
+        ).run(1, e)
+        path = f"plots/reb/{7900//p}mb_{e}"
+        ProfilerPlotter.plot_average_profiler(rebinning_profilers, path)
+        ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, path)
+        ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, path)
+        ProfilerPlotter.plot_gantt(rebinning_profilers, path)
+        with open(f"{path}/profiler.txt", "w") as f:
+            f.write(str(rebinning_profilers[0]))
+
+
 
 """
 rebinning_profilers = RebinningStep(
-    input_data_path=parameters["RebinningStep"]["input_data_path"],
+    input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
     parameters=parameters["RebinningStep"]["parameters"],
     output=parameters["RebinningStep"]["output"],
 ).run(1)
-
-print(rebinning_profilers[0])
-
-ProfilerPlotter.plot_average_profiler(rebinning_profilers, f"plots/reb")
-ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, f"plots/reb")
-ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, f"plots/reb")
-ProfilerPlotter.plot_gantt(rebinning_profilers, "plots/reb")
-
-
-"""
 
 calibration_profilers = CalibrationStep(
     input_data_path=parameters["CalibrationStep"]["input_data_path"],
@@ -123,22 +133,24 @@ calibration_profilers = CalibrationStep(
     output=parameters["CalibrationStep"]["output"],
 ).run(1)
 
+SubstractionStep(
+    input_data_path=parameters["SubstractionStep"]["input_data_path"],
+    parameters=parameters["SubstractionStep"]["parameters"],
+    output=parameters["SubstractionStep"]["output"],
+).run(1)
+"""
+
+
 
 ProfilerPlotter.plot_average_profiler(calibration_profilers, f"plots/cal")
 ProfilerPlotter.plot_aggregated_profiler(calibration_profilers, f"plots/cal")
 ProfilerPlotter.plot_aggregated_sum_profiler(calibration_profilers, f"plots/cal")
 ProfilerPlotter.plot_gantt(calibration_profilers, "plots/cal")
 
-"""
-SubstractionStep(
-    input_data_path=parameters["SubstractionStep"]["input_data_path"],
-    parameters=parameters["SubstractionStep"]["parameters"],
-    output=parameters["SubstractionStep"]["output"],
-).run(1)
 
-"""
 
-"""
+
+
 ApplyCalibrationStep(
     input_data_path=parameters["ApplyCalibrationStep"]["input_data_path"],
     parameters=parameters["ApplyCalibrationStep"]["parameters"],
