@@ -3,8 +3,8 @@ from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibratio
 from steps.imaging import imaging, monitor_and_run_imaging
 from s3path import S3Path
 import logging
-from util import ProfilerPlotter
 from util import setup_logging
+import lithops
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -138,7 +138,25 @@ SubstractionStep(
     parameters=parameters["SubstractionStep"]["parameters"],
     output=parameters["SubstractionStep"]["output"],
 ).run(1)
+
+
+ApplyCalibrationStep(
+    input_data_path=parameters["ApplyCalibrationStep"]["input_data_path"],
+    parameters=parameters["ApplyCalibrationStep"]["parameters"],
+    output=parameters["ApplyCalibrationStep"]["output"],
+).run(1)
+
+
+fexec = lithops.FunctionExecutor()
+
+fexec.call_async(
+    monitor_and_run_imaging,
+    parameters["ImagingStep"],
+    timeout=1800,
+)
+fexec.get_result()
 """
+
 
 
 
@@ -158,12 +176,5 @@ ApplyCalibrationStep(
 ).run()
 
 
-fexec = lithops.FunctionExecutor()
 
-fexec.call_async(
-    monitor_and_run_imaging,
-    parameters["ImagingStep"],
-    timeout=1800,
-)
-fexec.get_result()
 """
