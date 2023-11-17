@@ -147,14 +147,6 @@ ApplyCalibrationStep(
 ).run(1)
 
 
-fexec = lithops.FunctionExecutor()
-
-fexec.call_async(
-    monitor_and_run_imaging,
-    parameters["ImagingStep"],
-    timeout=1800,
-)
-fexec.get_result()
 """
 
 
