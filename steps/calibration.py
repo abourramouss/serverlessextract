@@ -245,15 +245,19 @@ class ApplyCalibrationStep(PipelineStep):
         stdout, stderr = time_it("execute_command", proc.communicate, time_records)
         print(stdout, stderr)
 
+        print("Listing directory:", sub_combined_path)
+        print(os.listdir(str(sub_combined_path)))
         # Zipping the processed directory
-        time_it("zip", data_source.zip, time_records, cal_partition_path)
-        print(f"Uploading {cal_partition_path} to {substracted_ms}/{output_ms}")
+        zipped_imaging = time_it(
+            "zip", data_source.zip, time_records, sub_combined_path
+        )
+        print(f"Uploading {zipped_imaging} to {substracted_ms}/{output_ms}")
 
         time_it(
             "upload_zip",
             data_source.upload_file,
             time_records,
-            f"{cal_partition_path}.zip",
+            zipped_imaging,
             S3Path(f"{substracted_ms}/{output_ms}"),
         )
 
