@@ -31,19 +31,49 @@ class DataSource(ABC):
 
     def zip(self, ms: PosixPath) -> PosixPath:
         print(f"Zipping directory: {ms}")
-        zip_filepath = PosixPath(f"{ms}.zip")  # This is the file path for the new zip file
+        zip_filepath = PosixPath(
+            f"{ms.parent}/{ms.name}.zip"
+        )  # File path for the new zip file
         with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for root, dirs, files in os.walk(ms):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    zip_file.write(file_path, os.path.relpath(file_path, start=ms.parent))
+                    # Include the partition folder name in the zip file
+                    arcname = os.path.relpath(file_path, start=ms.parent)
+                    zip_file.write(file_path, arcname)
+        return zip_filepath
+
+    def zip_files(self, ms: PosixPath, h5_file: PosixPath) -> PosixPath:
+        partition_name = ms.name  # Assuming ms.name is something like 'partition_1.ms'
+        zip_filepath = PosixPath(f"{ms.parent}/{partition_name}.zip")
+
+        with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Add .ms files to the zip, within a subfolder named 'partition_x.ms/ms'
+            for root, dirs, files in os.walk(ms):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.join(
+                        partition_name,
+                        "ms",
+                        os.path.relpath(file_path, start=ms),
+                    )
+                    zip_file.write(file_path, arcname)
+
+            # Add .h5 file to the zip, within a subfolder named 'partition_x.ms/h5'
+            h5_arcname = os.path.join(partition_name, "h5", h5_file.name)
+            zip_file.write(h5_file, h5_arcname)
+
         return zip_filepath
 
     def unzip(self, ms: PosixPath) -> PosixPath:
         zip_file = zipfile.ZipFile(ms)
-        part_name = ms.name.split(".")[0]
-        print(f"part_name: {part_name}")
-        extract_path = PosixPath(f"{ms.parent}/{part_name}.ms")
+        extract_path = (
+            ms.parent
+        )  # Set the extract path to the parent directory of the zip file
         zip_file.extractall(extract_path)
         zip_file.close()
-        return extract_path
+
+        # Construct the new path to the .ms directory
+        part_name = ms.stem
+        new_ms_path = extract_path / part_name
+        return new_ms_path

@@ -48,17 +48,20 @@ class PipelineStep(ABC):
         profiler.time_records = time_records
         return profiler
 
-    def run(self, func_limit: int):
+    def run(
+        self, func_limit: Optional[int] = None, runtime_memory: Optional[int] = None
+    ):
         extra_env = {"HOME": "/tmp"}
-        function_executor = lithops.FunctionExecutor()
+
+        function_executor = lithops.FunctionExecutor(runtime_memory=runtime_memory)
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
             prefix=f"{self.input_data_path.key}/",
         )
         if f"{self.input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
-
-        keys = keys[0:func_limit]
+        if func_limit:
+            keys = keys[0:func_limit]
         s3_paths = [
             (
                 S3Path.from_bucket_key(
@@ -71,9 +74,7 @@ class PipelineStep(ABC):
         ]
 
         futures = function_executor.map(
-            self._execute_step,
-            s3_paths,
-            extra_env=extra_env,
+            self._execute_step, s3_paths, extra_env=extra_env
         )
         results = function_executor.get_result(futures)
         return results
