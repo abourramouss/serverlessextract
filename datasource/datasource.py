@@ -55,7 +55,7 @@ class DataSource(ABC):
                     arcname = os.path.join(
                         partition_name,
                         "ms",
-                        os.path.relpath(file_path, start=ms.parent),
+                        os.path.relpath(file_path, start=ms),
                     )
                     zip_file.write(file_path, arcname)
 

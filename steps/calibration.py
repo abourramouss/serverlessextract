@@ -86,6 +86,7 @@ class CalibrationStep(PipelineStep):
         # Zip the .h5 file and .ms directory together
         combined_zip = data_source.zip_files(cal_partition_path, output_h5_path)
 
+        print(f"Uploading {combined_zip} to {h5}/{combined_zip.name}")
         # Upload the combined zip file
         time_it(
             "upload_combined",
@@ -169,17 +170,22 @@ class SubstractionStep(PipelineStep):
             f"sub.applycal.parmdb={output_h5}",
             f"sub.sourcedb={sourcedb_dir}",
         ]
-        print(cmd)
 
+        print("Listing directory:")
+        print(os.listdir(str(cal_partition_path)))
+        print("Execute script")
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-        stdout, stderr = time_it("execute_script", time_records, proc.communicate)
+        stdout, stderr = time_it("execute_script", proc.communicate, time_records)
+        print(stdout, stderr)
 
+        time_it("zip", data_source.zip, time_records, cal_combined_path)
+        print(f"Uploading {cal_combined_path}.zip to {substracted_ms}")
         time_it(
-            "upload_directory",
-            data_source.upload_directory,
+            "upload_zip",
+            data_source.upload_file,
             time_records,
-            cal_partition_path,
-            S3Path(f"{substracted_ms}/ms/{output_ms}"),
+            f"{cal_combined_path}.zip",
+            S3Path(f"{substracted_ms/str(cal_combined_path.name)}.zip"),
         )
 
         return time_records
@@ -211,27 +217,44 @@ class ApplyCalibrationStep(PipelineStep):
     ):
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
+        time_records = []
         cal_partition_path = data_source.download_directory(calibrated_ms)
         param_path = dict_to_parset(params["apply"])
-        h5_path = str(calibrated_ms).replace("ms", "h5")
-        h5_path = h5_path.replace("substraction_out", "calibration_out")
-        print("H5 path:", h5_path)
-        input_h5 = data_source.download_file(S3Path(h5_path))
+
+        sub_combined_path = time_it(
+            "unzip", data_source.unzip, time_records, cal_partition_path
+        )
+
+        print(f"Subtracted combined path: {sub_combined_path}")
+        input_ms = sub_combined_path / "ms"
+        h5_path = sub_combined_path / "h5"
+        input_h5 = str(f"{h5_path}/output.h5")
+
         output_ms = str(calibrated_ms).split("/")[-1]
 
         cmd = [
             "DP3",
             str(param_path),
-            f"msin={cal_partition_path}",
+            f"msin={input_ms}",
             f"apply.parmdb={input_h5}",
         ]
 
         print("command", cmd)
 
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-        stdout, stderr = proc.communicate()
+        stdout, stderr = time_it("execute_command", proc.communicate, time_records)
         print(stdout, stderr)
 
-        data_source.upload_directory(
-            cal_partition_path, S3Path(f"{substracted_ms}/ms/{output_ms}")
+        # Zipping the processed directory
+        time_it("zip", data_source.zip, time_records, cal_partition_path)
+        print(f"Uploading {cal_partition_path} to {substracted_ms}/{output_ms}")
+
+        time_it(
+            "upload_zip",
+            data_source.upload_file,
+            time_records,
+            f"{cal_partition_path}.zip",
+            S3Path(f"{substracted_ms}/{output_ms}"),
         )
+
+        return time_records
