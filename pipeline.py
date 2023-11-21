@@ -4,7 +4,7 @@ from steps.imaging import imaging, monitor_and_run_imaging
 from s3path import S3Path
 import logging
 from util import setup_logging
-import lithops
+from util import ProfilerPlotter
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -99,11 +99,10 @@ parameters = {
         "output_path": S3Path("/ayman-extract/extract-data/imaging_out/"),
     },
 }
-"""
 
-runtime_memory = [1769, 3538, 5307, 7076, 8845, 10000]
-for i, p in enumerate([7]):
-    for e in runtime_memory[0 : len(runtime_memory) - i]:
+runtime_memory = [3538, 5307, 7076, 8845, 10000]
+for i, p in enumerate([2]):
+    for e in runtime_memory:
         print(p, e)
         rebinning_profilers = RebinningStep(
             input_data_path=S3Path(f"/ayman-extract/partitions/partitions_{p}zip"),
@@ -119,8 +118,8 @@ for i, p in enumerate([7]):
             f.write(str(rebinning_profilers[0]))
 
 
-
 """
+
 rebinning_profilers = RebinningStep(
     input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
     parameters=parameters["RebinningStep"]["parameters"],
@@ -145,28 +144,6 @@ ApplyCalibrationStep(
     parameters=parameters["ApplyCalibrationStep"]["parameters"],
     output=parameters["ApplyCalibrationStep"]["output"],
 ).run(1)
-
-
-"""
-
-
-
-
-ProfilerPlotter.plot_average_profiler(calibration_profilers, f"plots/cal")
-ProfilerPlotter.plot_aggregated_profiler(calibration_profilers, f"plots/cal")
-ProfilerPlotter.plot_aggregated_sum_profiler(calibration_profilers, f"plots/cal")
-ProfilerPlotter.plot_gantt(calibration_profilers, "plots/cal")
-
-
-
-
-
-ApplyCalibrationStep(
-    input_data_path=parameters["ApplyCalibrationStep"]["input_data_path"],
-    parameters=parameters["ApplyCalibrationStep"]["parameters"],
-    output=parameters["ApplyCalibrationStep"]["output"],
-).run()
-
 
 
 """
