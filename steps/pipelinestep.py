@@ -43,6 +43,7 @@ class PipelineStep(ABC):
             command_args = kwargs["args"]
         else:
             raise ValueError("Expected 'args' key with a tuple value in kwargs")
+        # Yields a profiler object, essentially what it does is create a new process for profiling, since multithreading wasn't working properly due to the GIL
         with profiling_context() as profiler:
             time_records = self.build_command(*command_args)
         profiler.time_records = time_records

@@ -111,6 +111,3 @@ RUN unzip lithops_lambda.zip \
 # Set the entrypoint and command
 ENTRYPOINT [ "/usr/local/bin/python", "-m", "awslambdaric" ]
 CMD [ "handler.entry_point.lambda_handler" ]
-
-
-

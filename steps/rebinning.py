@@ -113,11 +113,4 @@ class RebinningStep(PipelineStep):
             S3Path(f"{output_ms}/{ms_name}.zip"),
         )
 
-        shutil.rmtree(partition_path)
-        shutil.rmtree(msout)
-        # Delete the zipped ms file if it's a file and not a directory
-        zipped_ms_path = f"{output_ms}/{ms_name}.zip"  # adjust the path as necessary
-        if os.path.isfile(zipped_ms_path):
-            os.remove(zipped_ms_path)
-
         return time_records

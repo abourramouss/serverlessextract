@@ -111,9 +111,8 @@ class Profiler:
                 self.parent_pid, ignore_pid=os.getpid()
             )
 
-            print(f"Profiler PID: {os.getpid()} Profiling PIDs: {self.pids}")
             self.profile()
-            print(self)
+            # print(self)
 
         conn.close()
 
