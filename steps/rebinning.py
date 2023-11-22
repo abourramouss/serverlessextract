@@ -115,9 +115,6 @@ class RebinningStep(PipelineStep):
 
         shutil.rmtree(partition_path)
         shutil.rmtree(msout)
-        # Delete the zipped ms file if it's a file and not a directory
-        zipped_ms_path = f"{output_ms}/{ms_name}.zip"  # adjust the path as necessary
-        if os.path.isfile(zipped_ms_path):
-            os.remove(zipped_ms_path)
+        os.remove(posix_source)
 
         return time_records
