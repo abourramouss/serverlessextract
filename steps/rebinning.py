@@ -113,4 +113,8 @@ class RebinningStep(PipelineStep):
             S3Path(f"{output_ms}/{ms_name}.zip"),
         )
 
+        shutil.rmtree(partition_path)
+        shutil.rmtree(msout)
+        os.remove(posix_source)
+
         return time_records

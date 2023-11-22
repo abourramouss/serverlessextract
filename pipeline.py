@@ -99,23 +99,26 @@ parameters = {
         "output_path": S3Path("/ayman-extract/extract-data/imaging_out/"),
     },
 }
-
-runtime_memory = [3538, 5307, 7076, 8845, 10000]
-for i, p in enumerate([2]):
-    for e in runtime_memory:
-        print(p, e)
-        rebinning_profilers = RebinningStep(
-            input_data_path=S3Path(f"/ayman-extract/partitions/partitions_{p}zip"),
-            parameters=parameters["RebinningStep"]["parameters"],
-            output=parameters["RebinningStep"]["output"],
-        ).run(1, e)
-        path = f"plots/reb/{7900//p}mb_{e}"
-        ProfilerPlotter.plot_average_profiler(rebinning_profilers, path)
-        ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, path)
-        ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, path)
-        ProfilerPlotter.plot_gantt(rebinning_profilers, path)
-        with open(f"{path}/profiler.txt", "w") as f:
-            f.write(str(rebinning_profilers[0]))
+# 61, 30, 15, 9, 7, 3, 2
+for j in range(1, 5):
+    runtime_memory = [1769, 3538, 5308, 7076, 8846, 10240]
+    for i, p in enumerate([15]):
+        for e in runtime_memory:
+            if 7900 // p > e:
+                continue
+            print(p, e, j)
+            rebinning_profilers = RebinningStep(
+                input_data_path=S3Path(f"/ayman-extract/partitions/partitions_{p}zip"),
+                parameters=parameters["RebinningStep"]["parameters"],
+                output=parameters["RebinningStep"]["output"],
+            ).run(1, e)
+            path = f"plots/reb/{7900//p}mb_{e}_{j}"
+            ProfilerPlotter.plot_average_profiler(rebinning_profilers, path)
+            ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, path)
+            ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, path)
+            ProfilerPlotter.plot_gantt(rebinning_profilers, path)
+            with open(f"{path}/profiler.txt", "w") as f:
+                f.write(str(rebinning_profilers[0]))
 
 
 """
