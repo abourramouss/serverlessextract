@@ -63,6 +63,7 @@ class Profiler:
             f"Disk Write Rate (MB/s): {self.disk_write}\n"
             f"Bytes sent (MB/s): {self.net_write}\n"
             f"Bytes received (MB/s): {self.net_read}\n"
+            f"Timerecords: {self.time_records}\n"
             f"Timestamps: {self.timestamps}\n"
         )
 
