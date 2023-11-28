@@ -5,6 +5,13 @@ from s3path import S3Path
 import logging
 from util import setup_logging
 from util import ProfilerPlotter
+import lithops
+import numpy as np
+import pandas as pd
+import openpyxl
+from openpyxl.utils.dataframe import dataframe_to_rows
+
+print(lithops.__file__)
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -100,13 +107,51 @@ parameters = {
     },
 }
 # 61, 30, 15, 9, 7, 3, 2
-for j in range(1, 5):
-    runtime_memory = [1769, 3538, 5308, 7076, 8846, 10240]
-    for i, p in enumerate([15]):
-        for e in runtime_memory:
-            if 7900 // p > e:
-                continue
-            print(p, e, j)
+# 1769, 3538, 5308, 7076, 10240
+# Constants
+runtime_memories = [1769, 3538, 5308, 7076, 10240]  # runtime memory configurations
+partition_sizes = [2]  # partition sizes
+iterations = 3
+
+tables = {
+    "download_ms": {
+        "mean": pd.DataFrame(
+            index=[7900 // p for p in partition_sizes], columns=runtime_memories
+        ),
+        "std": pd.DataFrame(
+            index=[7900 // p for p in partition_sizes], columns=runtime_memories
+        ),
+    },
+    "execute_script": {
+        "mean": pd.DataFrame(
+            index=[7900 // p for p in partition_sizes], columns=runtime_memories
+        ),
+        "std": pd.DataFrame(
+            index=[7900 // p for p in partition_sizes], columns=runtime_memories
+        ),
+    },
+    "upload_rebinnedms": {
+        "mean": pd.DataFrame(
+            index=[7900 // p for p in partition_sizes], columns=runtime_memories
+        ),
+        "std": pd.DataFrame(
+            index=[7900 // p for p in partition_sizes], columns=runtime_memories
+        ),
+    },
+}
+# Collecting average durations and calculating mean and standard deviation
+for i, p in enumerate(partition_sizes):
+    input_size = 7900 // p
+    for e in runtime_memories:
+        average_durations = []  # Reset for each (input_size, e) combination
+        operation_durations = {
+            "download_ms": [],
+            "execute_script": [],
+            "upload_rebinnedms": [],
+        }
+        if input_size > e:
+            continue
+        for j in range(iterations):
             rebinning_profilers = RebinningStep(
                 input_data_path=S3Path(f"/ayman-extract/partitions/partitions_{p}zip"),
                 parameters=parameters["RebinningStep"]["parameters"],
@@ -116,11 +161,66 @@ for j in range(1, 5):
             ProfilerPlotter.plot_average_profiler(rebinning_profilers, path)
             ProfilerPlotter.plot_aggregated_profiler(rebinning_profilers, path)
             ProfilerPlotter.plot_aggregated_sum_profiler(rebinning_profilers, path)
-            ProfilerPlotter.plot_gantt(rebinning_profilers, path)
-            with open(f"{path}/profiler.txt", "w") as f:
-                f.write(str(rebinning_profilers[0]))
+            average_duration = ProfilerPlotter.plot_gantt(rebinning_profilers, path)
+            average_durations.append(average_duration)
+
+            for operation in operation_durations:
+                operation_durations[operation].append(average_duration[operation])
+
+        # Calculate mean and standard deviation for each operation and update tables
+        for operation in operation_durations:
+            mean = np.mean(operation_durations[operation])
+            std = np.std(operation_durations[operation])
+            tables[operation]["mean"].at[input_size, e] = mean
+            tables[operation]["std"].at[input_size, e] = std
 
 
+def update_or_append_row(path, sheet_name, dataframe, include_index=True):
+    # Load the workbook and the specific sheet
+    book = openpyxl.load_workbook(path)
+    sheet = (
+        book[sheet_name]
+        if sheet_name in book.sheetnames
+        else book.create_sheet(sheet_name)
+    )
+
+    # Convert dataframe to rows
+    rows_gen = dataframe_to_rows(dataframe, index=include_index, header=False)
+
+    # Iterate over the rows of the dataframe
+    for df_row in rows_gen:
+        # Skip the header row
+        if df_row[0] == dataframe.index.name:
+            continue
+
+        input_size = df_row[0]  # Assuming this is the first element (index) in df_row
+        row_updated = False
+
+        # Iterate over the rows of the sheet starting from the second row
+        for idx, sheet_row in enumerate(sheet.iter_rows(min_row=2), start=2):
+            if sheet_row[0].value == input_size:
+                # Update the existing row
+                for col_idx, value in enumerate(df_row, start=1):
+                    sheet.cell(row=idx, column=col_idx, value=value)
+                row_updated = True
+                break
+
+        # Append a new row if not updated
+        if not row_updated:
+            sheet.append(df_row)
+
+    # Save the workbook
+    book.save(path)
+    book.close()
+
+
+excel_path = "time_stats.xlsx"
+for operation in tables:
+    mean_sheet_title = f"{operation} Mean"
+    std_sheet_title = f"{operation} Std Dev"
+
+    update_or_append_row(excel_path, mean_sheet_title, tables[operation]["mean"])
+    update_or_append_row(excel_path, std_sheet_title, tables[operation]["std"])
 """
 
 rebinning_profilers = RebinningStep(

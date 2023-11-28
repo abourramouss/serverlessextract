@@ -1,4 +1,4 @@
-# Python 3.10
+# Python 3.8
 FROM python:3.8
 
 RUN apt-get update \
@@ -74,12 +74,13 @@ RUN git clone https://github.com/lofar-astron/DP3.git /DP3 \
 	&& make install \
 	&& cd / && rm -rf /DP3
 # Set the working directory to the function directory
+# Set the working directory to the function directory
 ARG FUNCTION_DIR="/function"
 RUN mkdir -p ${FUNCTION_DIR}
 
+# Install dependencies (excluding standard Lithops)
 RUN pip install --upgrade --ignore-installed pip wheel setuptools \
 	&& pip install --upgrade --no-cache-dir \
-	lithops \
 	awslambdaric \
 	boto3 \
 	redis \
@@ -96,6 +97,13 @@ RUN pip install --upgrade --ignore-installed pip wheel setuptools \
 	psutil \
 	s3path
 
+# Copy custom Lithops 
+COPY lithops ${FUNCTION_DIR}/lithops
+
+# Install custom Lithops
+RUN cd ${FUNCTION_DIR}/lithops \
+	&& pip install .
+
 WORKDIR ${FUNCTION_DIR}
 
 # Copy function code
@@ -105,8 +113,6 @@ RUN unzip lithops_lambda.zip \
 	&& mkdir handler \
 	&& touch handler/__init__.py \
 	&& mv entry_point.py handler/
-
-
 
 # Set the entrypoint and command
 ENTRYPOINT [ "/usr/local/bin/python", "-m", "awslambdaric" ]

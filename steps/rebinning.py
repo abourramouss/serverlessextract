@@ -63,6 +63,7 @@ class RebinningStep(PipelineStep):
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
 
+        print(ms)
         # Profile the download_directory method
         partition_path = time_it(
             "download_ms", data_source.download_directory, time_records, ms
