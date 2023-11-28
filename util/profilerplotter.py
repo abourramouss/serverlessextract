@@ -371,3 +371,6 @@ class ProfilerPlotter:
         plt.tight_layout()
         plt.savefig(save_path, bbox_inches="tight")
         print(f"Plot saved to: {save_path}")
+
+        # return the average duration of all workers
+        return average_duration

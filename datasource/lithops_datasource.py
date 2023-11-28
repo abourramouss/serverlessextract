@@ -4,6 +4,14 @@ from .datasource import DataSource
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from s3path import S3Path
 from pathlib import PosixPath
+import boto3
+from boto3.s3.transfer import S3Transfer, TransferConfig
+import threading
+import concurrent.futures
+import botocore
+
+KB = 1024
+MB = KB * KB
 
 
 def s3_to_local_path(
@@ -24,20 +32,26 @@ def local_to_s3_path(local_path: str, base_local_dir: str = "/tmp") -> S3Path:
 
 
 class LithopsDataSource(DataSource):
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self.storage = Storage()
 
     def download_file(
         self, read_path: S3Path, base_path: PosixPath = PosixPath("/tmp")
     ) -> PosixPath:
-        """Download a file from S3 and returns the local path."""
         if isinstance(read_path, S3Path):
             try:
                 local_path = s3_to_local_path(read_path, base_local_dir=str(base_path))
                 os.makedirs(local_path.parent, exist_ok=True)
+
+                # Download file uses the default config
                 self.storage.download_file(
-                    read_path.bucket, read_path.key, str(local_path)
+                    read_path.bucket,
+                    read_path.key,
+                    str(local_path),
                 )
+
                 return PosixPath(local_path)
             except Exception as e:
                 print(f"Failed to download file {read_path.key}: {e}")
