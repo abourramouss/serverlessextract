@@ -5,11 +5,11 @@ from s3path import S3Path
 import logging
 from util import setup_logging
 from util import ProfilerPlotter
-import lithops
+from util import ProfilerCollection
+from lithops import Storage
 import numpy as np
 import pandas as pd
-import openpyxl
-from openpyxl.utils.dataframe import dataframe_to_rows
+
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -107,6 +107,40 @@ parameters = {
 # 61, 30, 15, 9, 7, 3, 2
 # 1769, 3538, 5308, 7076, 10240
 # Constants
+MB = 1024 * 1024
+storage = Storage()
+print(
+    parameters["RebinningStep"]["input_data_path"].bucket,
+    parameters["RebinningStep"]["input_data_path"].key,
+)
+runtime_memory = 1769
+chunk_size = storage.head_object(
+    parameters["RebinningStep"]["input_data_path"].bucket,
+    f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
+)
+
+chunk_size = int(chunk_size["content-length"]) // MB
+print("Chunk size:", chunk_size)
+collection = ProfilerCollection()
+# Instantiate the singleton Profilercollection
+rebinning_profilers = RebinningStep(
+    input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
+    parameters=parameters["RebinningStep"]["parameters"],
+    output=parameters["RebinningStep"]["output"],
+).run(func_limit=1, runtime_memory=1769)
+
+collection.add_profilers(
+    profiler=rebinning_profilers,
+    step_name="Rebinning",
+    runtime_size=1769,
+    chunk_size=chunk_size,
+    iteration=1,
+)
+
+print("Profiler collection:", collection.to_json())
+"""
+
+Code to create a table of times for the different runtime and chunksizes, each cell represents the average time it took to execute rebinning for a specific runtime and chunksize
 runtime_memories = [1769, 3538, 5308, 7076, 10240]  # runtime memory configurations
 partition_sizes = [2]  # partition sizes
 iterations = 3
@@ -219,6 +253,13 @@ for operation in tables:
 
     update_or_append_row(excel_path, mean_sheet_title, tables[operation]["mean"])
     update_or_append_row(excel_path, std_sheet_title, tables[operation]["std"])
+
+
+
+
+
+
+"""
 
 
 """
