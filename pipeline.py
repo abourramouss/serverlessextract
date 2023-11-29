@@ -11,8 +11,6 @@ import pandas as pd
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 
-print(lithops.__file__)
-
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
 
@@ -221,6 +219,8 @@ for operation in tables:
 
     update_or_append_row(excel_path, mean_sheet_title, tables[operation]["mean"])
     update_or_append_row(excel_path, std_sheet_title, tables[operation]["std"])
+
+
 """
 
 rebinning_profilers = RebinningStep(
