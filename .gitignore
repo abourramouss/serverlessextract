@@ -4,3 +4,4 @@ partition/partitions/
 extract/
 *env/
 .vscode/settings.json
+*.png

@@ -4,6 +4,7 @@ import os
 import socket
 from multiprocessing import Process, Pipe
 import contextlib
+import json
 
 
 def time_it(label, function, time_records, *args, **kwargs):
@@ -27,7 +28,7 @@ def time_it(label, function, time_records, *args, **kwargs):
 @contextlib.contextmanager
 def profiling_context():
     parent_conn, child_conn = Pipe()
-    profiler = Profiler(os.getpid())
+    profiler = Profiler()
     monitoring_process = Process(target=profiler.start_profiling, args=(child_conn,))
     monitoring_process.start()
 
@@ -43,15 +44,17 @@ def profiling_context():
 
 
 class Profiler:
-    def __init__(self, pid):
+    def __init__(self):
+        # process managing
+        self.pids = []  # List of children pids
+        self.parent_pid = os.getpid()  # Parent who calls the profiling PID
+        # statistics
         self.cpu_percent = []
         self.memory_used_mb = []
         self.disk_read = []
         self.disk_write = []
         self.net_write = []
         self.net_read = []
-        self.pids = []
-        self.parent_pid = pid
         self.time_records = []
         self.timestamps = []
 
@@ -66,6 +69,42 @@ class Profiler:
             f"Timerecords: {self.time_records}\n"
             f"Timestamps: {self.timestamps}\n"
         )
+
+    def to_dict(self):
+        return {
+            "parent_pid": self.parent_pid,
+            "cpu_percent": self.cpu_percent,
+            "memory_used_mb": self.memory_used_mb,
+            "disk_read": self.disk_read,
+            "disk_write": self.disk_write,
+            "net_write": self.net_write,
+            "net_read": self.net_read,
+            "pids": self.pids,
+            "timestamps": self.timestamps,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        profiler = cls()
+        profiler.parent_pid = data["parent_pid"]
+        profiler.cpu_percent = data["cpu_percent"]
+        profiler.memory_used_mb = data["memory_used_mb"]
+        profiler.disk_read = data["disk_read"]
+        profiler.disk_write = data["disk_write"]
+        profiler.net_write = data["net_write"]
+        profiler.net_read = data["net_read"]
+        profiler.pids = data["pids"]
+        profiler.timestamps = data["timestamps"]
+
+        return profiler
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_json(cls, json_str):
+        data = json.loads(json_str)
+        return cls.from_dict(data)
 
     def update(self, received_data):
         if not isinstance(received_data, Profiler):
