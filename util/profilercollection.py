@@ -2,6 +2,7 @@
 
 from util import Profiler
 from collections import namedtuple
+import json
 
 ProfilerKey = namedtuple(
     "ProfilerKey", ["step_name", "runtime_size", "chunk_size", "iteration"]
@@ -13,9 +14,18 @@ class ProfilerCollection:
         self.profilers = {}
 
     def add_profilers(self, step_name, runtime_size, chunk_size, iteration, profiler):
-        key = ProfilerKey(step_name, runtime_size, chunk_size, iteration)
-        self.profilers[key] = profiler
+        # If it already exists, update it, otherwise add it
+        step = self.profilers.setdefault(step_name, {})
+        runtime = step.setdefault(runtime_size, {})
+        chunk = runtime.setdefault(chunk_size, {})
+        chunk[iteration] = profiler
 
     def get_profilers(self, step_name, runtime_size, chunk_size, iteration):
         key = ProfilerKey(step_name, runtime_size, chunk_size, iteration)
         return self.profilers[key]
+
+    def to_dict(self):
+        return self.profilers
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
