@@ -43,6 +43,86 @@ def profiling_context():
         child_conn.close()
 
 
+class ProcessManager:
+    def __init__(self):
+        self.pids = []
+
+    def add_pid(self, pid):
+        if pid not in self.pids:
+            self.pids.append(pid)
+
+    def get_all_children(self, parent_pid):
+        children = []
+        ignore_pid = os.getpid()
+        for child in psutil.Process(parent_pid).children(recursive=True):
+            if ignore_pid is not None and child.pid == ignore_pid:
+                continue  # Skip the profiler process
+            children.append(child.pid)
+        return children
+
+    def is_process_alive(self, pid):
+        try:
+            psutil.Process(pid)
+            return True
+        except psutil.NoSuchProcess:
+            return False
+
+
+class IMetricCollector:
+    def collect_metrics(self):
+        pass
+
+
+class CPUMetricCollector(IMetricCollector):
+    def collect_metrics(self, pid):
+        return psutil.Process(pid).cpu_percent(interval=0.5)
+
+
+class MemoryMetricCollector(IMetricCollector):
+    def collect_metrics(self, pid):
+        return psutil.Process(pid).memory_info().rss >> 20
+
+
+class DiskMetricCollector(IMetricCollector):
+    def collect_metrics(self, pid):
+        current_counter = psutil.Process(pid).io_counters()
+        read = current_counter.read_bytes / 1024.0**2
+        write = current_counter.write_bytes / 1024.0**2
+
+        return read, write
+
+
+class NetworkMetricCollector(IMetricCollector):
+    def collect_metrics(self):
+        current_net_counters = psutil.net_io_counters(pernic=False)
+
+        read = current_net_counters.bytes_recv / 1024.0**2
+        write = current_net_counters.bytes_sent / 1024.0**2
+
+        return read, write
+
+
+class MetricCollector:
+    def __init__(self, process_manager):
+        self.process_manager = process_manager
+        self.cpu_collector = CPUMetricCollector()
+        self.memory_collector = MemoryMetricCollector()
+        self.disk_collector = DiskMetricCollector()
+        self.network_collector = NetworkMetricCollector()
+
+    def collect_all_metrics(self):
+        metrics = {}
+        for pid in self.process_manager.pids:
+            if self.process_manager.is_process_alive(pid):
+                metrics[pid] = {
+                    "cpu": self.cpu_collector.collect_metrics(pid),
+                    "memory": self.memory_collector.collect_metrics(pid),
+                    "disk": self.disk_collector.collect_metrics(pid),
+                }
+        metrics["network"] = self.network_collector.collect_metrics()
+        return metrics
+
+
 class Profiler:
     def __init__(self):
         # process managing
