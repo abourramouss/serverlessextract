@@ -6,4 +6,4 @@ class Pipeline:
         self.step_queue = []
 
     def append_step(self, step: PipelineStep):
-        self.step_stack.append(step)
+        self.step_queue.append(step)

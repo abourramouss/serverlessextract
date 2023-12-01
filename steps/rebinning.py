@@ -5,31 +5,12 @@ from typing import Dict, List, Optional
 from s3path import S3Path
 from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
-from util import dict_to_parset
+from util import dict_to_parset, time_it
 import logging
 import os
-import time
 import shutil
 
 logger = logging.getLogger(__name__)
-
-
-def time_it(label, function, time_records, *args, **kwargs):
-    print(f"label: {label}, type of function: {type(function)}")
-
-    start_time = time.time()
-    result = function(*args, **kwargs)
-    end_time = time.time()
-
-    record = {
-        "label": label,
-        "start_time": start_time,
-        "end_time": end_time,
-        "duration": (end_time - start_time),
-    }
-    time_records.append(record)
-
-    return result
 
 
 class RebinningStep(PipelineStep):

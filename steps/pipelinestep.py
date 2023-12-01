@@ -80,23 +80,6 @@ class PipelineStep(ABC):
         results = function_executor.get_result(futures)
         return results
 
-    def time_it(label, function, time_records, *args, **kwargs):
-        print(f"label: {label}, type of function: {type(function)}")
-
-        start_time = time.time()
-        result = function(*args, **kwargs)
-        end_time = time.time()
-
-        record = {
-            "label": label,
-            "start_time": start_time,
-            "end_time": end_time,
-            "duration": (end_time - start_time),
-        }
-        time_records.append(record)
-
-        return result
-
     """
     This code is for ms as a directory, instead of zipping it.
     

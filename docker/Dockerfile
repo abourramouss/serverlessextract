@@ -95,14 +95,9 @@ RUN pip install --upgrade --ignore-installed pip wheel setuptools \
 	ps-mem \
 	tblib \
 	psutil \
-	s3path
+	s3path \
+	lithops==2.9.0
 
-# Copy custom Lithops 
-COPY lithops ${FUNCTION_DIR}/lithops
-
-# Install custom Lithops
-RUN cd ${FUNCTION_DIR}/lithops \
-	&& pip install .
 
 WORKDIR ${FUNCTION_DIR}
 
