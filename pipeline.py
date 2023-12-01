@@ -9,7 +9,7 @@ from util import ProfilerCollection
 from lithops import Storage
 import numpy as np
 import pandas as pd
-
+import os
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -121,23 +121,16 @@ chunk_size = storage.head_object(
 
 chunk_size = int(chunk_size["content-length"]) // MB
 print("Chunk size:", chunk_size)
+print("Parent pid: ", os.getpid())
 collection = ProfilerCollection()
 # Instantiate the singleton Profilercollection
 rebinning_profilers = RebinningStep(
     input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
     parameters=parameters["RebinningStep"]["parameters"],
     output=parameters["RebinningStep"]["output"],
-).run(func_limit=1, runtime_memory=1769)
+).run(func_limit=1, runtime_memory=runtime_memory)
 
-collection.add_profilers(
-    profiler=rebinning_profilers,
-    step_name="Rebinning",
-    runtime_size=1769,
-    chunk_size=chunk_size,
-    iteration=1,
-)
 
-print("Profiler collection:", collection.to_json())
 """
 
 Code to create a table of times for the different runtime and chunksizes, each cell represents the average time it took to execute rebinning for a specific runtime and chunksize

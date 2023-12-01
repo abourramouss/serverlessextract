@@ -5,6 +5,7 @@ import socket
 from multiprocessing import Process, Pipe
 import contextlib
 import json
+from dataclasses import dataclass
 
 
 def time_it(label, function, time_records, *args, **kwargs):
@@ -29,7 +30,9 @@ def time_it(label, function, time_records, *args, **kwargs):
 def profiling_context():
     parent_conn, child_conn = Pipe()
     profiler = Profiler()
-    monitoring_process = Process(target=profiler.start_profiling, args=(child_conn,))
+    monitoring_process = Process(
+        target=profiler.start_profiling, args=(child_conn, os.getpid()), name="profiler"
+    )
     monitoring_process.start()
 
     try:
@@ -37,35 +40,36 @@ def profiling_context():
     finally:
         parent_conn.send("stop")
         received_profiler_data = parent_conn.recv()
-        profiler.update(received_profiler_data)
+        # profiler.update(received_profiler_data)
         monitoring_process.join()
         parent_conn.close()
         child_conn.close()
 
 
-class ProcessManager:
-    def __init__(self):
-        self.pids = []
+@dataclass
+class CPUMetrics:
+    timestamp: float
+    cpu_usage: float
 
-    def add_pid(self, pid):
-        if pid not in self.pids:
-            self.pids.append(pid)
 
-    def get_all_children(self, parent_pid):
-        children = []
-        ignore_pid = os.getpid()
-        for child in psutil.Process(parent_pid).children(recursive=True):
-            if ignore_pid is not None and child.pid == ignore_pid:
-                continue  # Skip the profiler process
-            children.append(child.pid)
-        return children
+@dataclass
+class MemoryMetrics:
+    timestamp: float
+    memory_used_mb: float
 
-    def is_process_alive(self, pid):
-        try:
-            psutil.Process(pid)
-            return True
-        except psutil.NoSuchProcess:
-            return False
+
+@dataclass
+class DiskMetrics:
+    timestamp: float
+    disk_read_mb: float
+    disk_write_mb: float
+
+
+@dataclass
+class NetworkMetrics:
+    timestamp: float
+    net_read_mb: float
+    net_write_mb: float
 
 
 class IMetricCollector:
@@ -74,55 +78,114 @@ class IMetricCollector:
 
 
 class CPUMetricCollector(IMetricCollector):
+    def __init__(self):
+        pass
+
     def collect_metrics(self, pid):
-        return psutil.Process(pid).cpu_percent(interval=0.5)
+        current_time = time.time()
+        return CPUMetrics(
+            timestamp=current_time,
+            cpu_usage=psutil.Process(pid).cpu_percent(interval=0.5),
+        )
 
 
 class MemoryMetricCollector(IMetricCollector):
+    def __init__(self):
+        pass
+
     def collect_metrics(self, pid):
-        return psutil.Process(pid).memory_info().rss >> 20
+        current_time = time.time()
+        return MemoryMetrics(
+            timestamp=current_time,
+            memory_used_mb=psutil.Process(pid).memory_info().rss >> 20,
+        )
 
 
 class DiskMetricCollector(IMetricCollector):
     def collect_metrics(self, pid):
+        current_time = time.time()
         current_counter = psutil.Process(pid).io_counters()
         read = current_counter.read_bytes / 1024.0**2
         write = current_counter.write_bytes / 1024.0**2
 
-        return read, write
+        return DiskMetrics(
+            timestamp=current_time, disk_read_mb=read, disk_write_mb=write
+        )
 
 
 class NetworkMetricCollector(IMetricCollector):
     def collect_metrics(self):
         current_net_counters = psutil.net_io_counters(pernic=False)
 
+        current_time = time.time()
         read = current_net_counters.bytes_recv / 1024.0**2
         write = current_net_counters.bytes_sent / 1024.0**2
 
-        return read, write
+        return NetworkMetrics(
+            timestamp=current_time, net_read_mb=read, net_write_mb=write
+        )
 
 
+class ProcessManager:
+    def __init__(self, parent_pid):
+        self.parent_pid = parent_pid
+
+    def is_process_alive(self, pid):
+        try:
+            psutil.Process(pid)
+            return True
+        except psutil.NoSuchProcess:
+            return False
+
+    def get_processes_pids(self):
+        # Return all the children except the profiler process
+        processes = []
+        profiler_pid = os.getpid()
+
+        processes.append(self.parent_pid)
+        for p in psutil.Process(self.parent_pid).children(recursive=True):
+            if p.pid == profiler_pid:
+                continue
+            processes.append(p.pid)
+        return processes
+
+
+@dataclass
 class MetricCollector:
-    def __init__(self, process_manager):
-        self.process_manager = process_manager
+    def __init__(self, parent_pid):
+        self.process_manager = ProcessManager(parent_pid=parent_pid)
         self.cpu_collector = CPUMetricCollector()
         self.memory_collector = MemoryMetricCollector()
-        self.disk_collector = DiskMetricCollector()
-        self.network_collector = NetworkMetricCollector()
+        self.parent_pid = parent_pid
 
     def collect_all_metrics(self):
-        metrics = {}
-        for pid in self.process_manager.pids:
+        all_metrics = []
+
+        print(f"tracking process pid {self.process}")
+        for pid in self.process_manager.get_processes_pids():
             if self.process_manager.is_process_alive(pid):
-                metrics[pid] = {
-                    "cpu": self.cpu_collector.collect_metrics(pid),
-                    "memory": self.memory_collector.collect_metrics(pid),
-                    "disk": self.disk_collector.collect_metrics(pid),
-                }
-        metrics["network"] = self.network_collector.collect_metrics()
-        return metrics
+                all_metrics.append(self.cpu_collector.collect_metrics(pid))
 
 
+class Profiler:
+    def start_profiling(self, conn, parent_pid):
+        metrics = MetricCollector(parent_pid)
+
+        while True:
+            if conn.poll():  # This is non-blocking
+                message = conn.recv()
+                if message == "stop":
+                    print("Received stop signal, stopping profiling.")
+                    conn.send(self)
+                    conn.close()
+                    break
+            metrics.collect_all_metrics()
+
+    def update(self, received_data):
+        raise NotImplementedError
+
+
+"""
 class Profiler:
     def __init__(self):
         # process managing
@@ -234,8 +297,6 @@ class Profiler:
             self.profile()
             # print(self)
 
-        conn.close()
-
     def stop_profiling(self):
         # Set the event to signal that profiling should stop
         self._stop_profiling.set()
@@ -324,3 +385,8 @@ class Profiler:
         write = current_net_counters.bytes_sent / 1024.0**2
 
         return read, write
+
+
+
+
+"""
