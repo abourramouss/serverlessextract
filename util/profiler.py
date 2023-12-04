@@ -4,7 +4,7 @@ import os
 from multiprocessing import Process, Pipe
 import contextlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Dict
 
 
@@ -48,6 +48,13 @@ class FunctionTimer:
     end_time: float
     duration: float
 
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
 
 @dataclass
 class SystemMetric:
@@ -55,6 +62,13 @@ class SystemMetric:
     pid: int
     metric_type: str
     value: Dict[str, float]
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
 
 
 class IMetricCollector:
@@ -155,6 +169,15 @@ class MetricCollector:
         self.network_collector = NetworkMetricCollector()
         self.all_metrics = {}
 
+    @classmethod
+    def from_dict(cls, data, parent_pid):
+        instance = cls(parent_pid)
+        for pid, metrics in data.items():
+            instance.all_metrics[pid] = [
+                SystemMetric.from_dict(metric) for metric in metrics
+            ]
+        return instance
+
     def __repr__(self):
         return f"MetricCollector(all_metrics={self.all_metrics})"
 
@@ -170,10 +193,13 @@ class MetricCollector:
             self.all_metrics[pid].append(
                 self.disk_collector.collect_metric(pid, "disk")
             )
-            # Add global network metrics, since it cannot be collected per process
-            self.all_metrics["global_network"] = self.network_collector.collect_metric(
+            # Collect global network metrics and append them to the list
+            network_metric = self.network_collector.collect_metric(
                 "global_network", "network"
             )
+            if "global_network" not in self.all_metrics:
+                self.all_metrics["global_network"] = []
+            self.all_metrics["global_network"].append(network_metric)
 
     def update(self, received_data):
         if not isinstance(received_data, MetricCollector):
@@ -182,11 +208,26 @@ class MetricCollector:
         # Update the MetricCollector data
         self.all_metrics.update(received_data.all_metrics)
 
+    def to_dict(self):
+        return {
+            pid: [metric.to_dict() for metric in metrics]
+            for pid, metrics in self.all_metrics.items()
+        }
+
 
 class Profiler:
     def __init__(self, parent_pid):
         self.metrics = MetricCollector(parent_pid)
         self.function_timers = []
+
+    @classmethod
+    def from_dict(cls, data, parent_pid):
+        profiler = cls(parent_pid)
+        profiler.metrics = MetricCollector.from_dict(data["metrics"], parent_pid)
+        profiler.function_timers = [
+            FunctionTimer.from_dict(timer) for timer in data["function_timers"]
+        ]
+        return profiler
 
     def __repr__(self):
         return f"Profiler(all_metrics={self.metrics.all_metrics}) function_timers={self.function_timers})"
@@ -208,3 +249,9 @@ class Profiler:
 
         # Update the MetricCollector data
         self.metrics.update(received_data.metrics)
+
+    def to_dict(self):
+        return {
+            "metrics": self.metrics.to_dict(),
+            "function_timers": [timer.to_dict() for timer in self.function_timers],
+        }
