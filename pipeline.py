@@ -10,6 +10,7 @@ from lithops import Storage
 import numpy as np
 import pandas as pd
 import os
+from util import Profiler
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -130,7 +131,11 @@ rebinning_profilers = RebinningStep(
     output=parameters["RebinningStep"]["output"],
 ).run(func_limit=1, runtime_memory=runtime_memory)
 
-print(rebinning_profilers)
+data = rebinning_profilers[0].to_dict()
+print(data)
+data = Profiler.from_dict(data, 1)
+print("-------------------------------")
+print(data)
 
 """
 
