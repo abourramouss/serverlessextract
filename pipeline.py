@@ -130,6 +130,7 @@ rebinning_profilers = RebinningStep(
     output=parameters["RebinningStep"]["output"],
 ).run(func_limit=1, runtime_memory=runtime_memory)
 
+print(rebinning_profilers)
 
 """
 
