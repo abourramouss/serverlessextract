@@ -113,7 +113,7 @@ print(
     parameters["RebinningStep"]["input_data_path"].bucket,
     parameters["RebinningStep"]["input_data_path"].key,
 )
-runtime_memory = 1769
+runtime_memory = 1768
 chunk_size = storage.head_object(
     parameters["RebinningStep"]["input_data_path"].bucket,
     f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
