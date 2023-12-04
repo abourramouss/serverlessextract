@@ -82,11 +82,13 @@ class CPUMetricCollector(IMetricCollector):
         pass
 
     def collect_metrics(self, pid):
-        current_time = time.time()
-        return CPUMetrics(
-            timestamp=current_time,
-            cpu_usage=psutil.Process(pid).cpu_percent(interval=0.5),
-        )
+        try:
+            current_time = time.time()
+            cpu_usage = psutil.Process(pid).cpu_percent(interval=0.5)
+            return CPUMetrics(timestamp=current_time, cpu_usage=cpu_usage)
+        except psutil.NoSuchProcess:
+            print(f"Process with PID {pid} no longer exists.")
+            return None
 
 
 class MemoryMetricCollector(IMetricCollector):
@@ -94,23 +96,31 @@ class MemoryMetricCollector(IMetricCollector):
         pass
 
     def collect_metrics(self, pid):
-        current_time = time.time()
-        return MemoryMetrics(
-            timestamp=current_time,
-            memory_used_mb=psutil.Process(pid).memory_info().rss >> 20,
-        )
+        try:
+            current_time = time.time()
+            return MemoryMetrics(
+                timestamp=current_time,
+                memory_used_mb=psutil.Process(pid).memory_info().rss >> 20,
+            )
+        except psutil.NoSuchProcess:
+            print(f"Process with PID {pid} no longer exists.")
+            return None
 
 
 class DiskMetricCollector(IMetricCollector):
     def collect_metrics(self, pid):
-        current_time = time.time()
-        current_counter = psutil.Process(pid).io_counters()
-        read = current_counter.read_bytes / 1024.0**2
-        write = current_counter.write_bytes / 1024.0**2
+        try:
+            current_time = time.time()
+            current_counter = psutil.Process(pid).io_counters()
+            read = current_counter.read_bytes / 1024.0**2
+            write = current_counter.write_bytes / 1024.0**2
 
-        return DiskMetrics(
-            timestamp=current_time, disk_read_mb=read, disk_write_mb=write
-        )
+            return DiskMetrics(
+                timestamp=current_time, disk_read_mb=read, disk_write_mb=write
+            )
+        except psutil.NoSuchProcess:
+            print(f"Process with PID {pid} no longer exists.")
+            return None
 
 
 class NetworkMetricCollector(IMetricCollector):
@@ -129,13 +139,6 @@ class NetworkMetricCollector(IMetricCollector):
 class ProcessManager:
     def __init__(self, parent_pid):
         self.parent_pid = parent_pid
-
-    def is_process_alive(self, pid):
-        try:
-            psutil.Process(pid)
-            return True
-        except psutil.NoSuchProcess:
-            return False
 
     def get_processes_pids(self):
         # Return all the children except the profiler process
@@ -161,10 +164,9 @@ class MetricCollector:
     def collect_all_metrics(self):
         all_metrics = []
 
-        print(f"tracking process pid {self.process}")
+        print(f"tracking process pid {self.process_manager.get_processes_pids}")
         for pid in self.process_manager.get_processes_pids():
-            if self.process_manager.is_process_alive(pid):
-                all_metrics.append(self.cpu_collector.collect_metrics(pid))
+            all_metrics.append(self.cpu_collector.collect_metrics(pid))
 
 
 class Profiler:
@@ -182,7 +184,7 @@ class Profiler:
             metrics.collect_all_metrics()
 
     def update(self, received_data):
-        raise NotImplementedError
+        print(f"received_data {received_data}")
 
 
 """
