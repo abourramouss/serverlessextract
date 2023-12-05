@@ -5,4 +5,4 @@ from .helpers import (
 )
 from .profiler import Profiler, profiling_context, time_it
 from .profilerplotter import ProfilerPlotter
-from .profilercollection import ProfilerCollection
+from .profilercollection import ProfilerCollection, StepProfiler

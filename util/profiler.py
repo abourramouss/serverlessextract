@@ -24,9 +24,10 @@ def time_it(label, function, time_records, *args, **kwargs):
 @contextlib.contextmanager
 def profiling_context():
     parent_conn, child_conn = Pipe()
-    profiler = Profiler(os.getpid())
+    profiler = Profiler()
+    parent_pid = os.getpid()
     monitoring_process = Process(
-        target=profiler.start_profiling, args=(child_conn, os.getpid()), name="profiler"
+        target=profiler.start_profiling, args=(child_conn, parent_pid)
     )
     monitoring_process.start()
 
@@ -161,8 +162,7 @@ class ProcessManager:
 
 @dataclass
 class MetricCollector:
-    def __init__(self, parent_pid):
-        self.process_manager = ProcessManager(parent_pid=parent_pid)
+    def __init__(self):
         self.cpu_collector = CPUMetricCollector()
         self.memory_collector = MemoryMetricCollector()
         self.disk_collector = DiskMetricCollector()
@@ -170,8 +170,8 @@ class MetricCollector:
         self.all_metrics = {}
 
     @classmethod
-    def from_dict(cls, data, parent_pid):
-        instance = cls(parent_pid)
+    def from_dict(cls, data):
+        instance = cls()
         for pid, metrics in data.items():
             instance.all_metrics[pid] = [
                 SystemMetric.from_dict(metric) for metric in metrics
@@ -181,9 +181,10 @@ class MetricCollector:
     def __repr__(self):
         return f"MetricCollector(all_metrics={self.all_metrics})"
 
-    def collect_all_metrics(self):
-        print(f"tracking process pid {self.process_manager.get_processes_pids}")
-        for pid in self.process_manager.get_processes_pids():
+    def collect_all_metrics(self, parent_pid):
+        process_manager = ProcessManager(parent_pid)
+        print(f"tracking process pid {process_manager.get_processes_pids}")
+        for pid in process_manager.get_processes_pids():
             if pid not in self.all_metrics:
                 self.all_metrics[pid] = []
             self.all_metrics[pid].append(self.cpu_collector.collect_metric(pid, "cpu"))
@@ -216,23 +217,25 @@ class MetricCollector:
 
 
 class Profiler:
-    def __init__(self, parent_pid):
-        self.metrics = MetricCollector(parent_pid)
+    def __init__(
+        self,
+    ):
+        self.metrics = MetricCollector()
         self.function_timers = []
 
     @classmethod
-    def from_dict(cls, data, parent_pid):
-        profiler = cls(parent_pid)
-        profiler.metrics = MetricCollector.from_dict(data["metrics"], parent_pid)
+    def from_dict(cls, data):
+        profiler = cls()
+        profiler.metrics = MetricCollector.from_dict(data["metrics"])
         profiler.function_timers = [
             FunctionTimer.from_dict(timer) for timer in data["function_timers"]
         ]
         return profiler
 
     def __repr__(self):
-        return f"Profiler(all_metrics={self.metrics.all_metrics}) function_timers={self.function_timers})"
+        return f"{self.metrics.all_metrics},{self.function_timers}"
 
-    def start_profiling(self, conn, pid):
+    def start_profiling(self, conn, parent_pid):
         while True:
             if conn.poll():  # This is non-blocking
                 message = conn.recv()
@@ -241,7 +244,7 @@ class Profiler:
                     conn.send(self)
                     conn.close()
                     break
-            self.metrics.collect_all_metrics()
+            self.metrics.collect_all_metrics(parent_pid)
 
     def update(self, received_data):
         if not isinstance(received_data, Profiler):
@@ -255,3 +258,6 @@ class Profiler:
             "metrics": self.metrics.to_dict(),
             "function_timers": [timer.to_dict() for timer in self.function_timers],
         }
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
