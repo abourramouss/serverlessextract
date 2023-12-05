@@ -167,52 +167,71 @@ class MetricCollector:
         self.memory_collector = MemoryMetricCollector()
         self.disk_collector = DiskMetricCollector()
         self.network_collector = NetworkMetricCollector()
-        self.all_metrics = {}
+        self.all_metrics = {}  # {pid: {"cpu": [], "memory": [], "disk": []}}
+        self.global_network_metrics = []  # Separate list for global network metrics
 
     @classmethod
     def from_dict(cls, data):
         instance = cls()
-        for pid, metrics in data.items():
-            instance.all_metrics[pid] = [
-                SystemMetric.from_dict(metric) for metric in metrics
-            ]
+        instance.global_network_metrics = [
+            SystemMetric.from_dict(metric) for metric in data.get("global_network", [])
+        ]
+        for pid, metrics_by_type in data.get("process_metrics", {}).items():
+            instance.all_metrics[pid] = {
+                metric_type: [SystemMetric.from_dict(metric) for metric in metrics]
+                for metric_type, metrics in metrics_by_type.items()
+            }
         return instance
 
     def __repr__(self):
-        return f"MetricCollector(all_metrics={self.all_metrics})"
+        return f"MetricCollector(all_metrics={self.all_metrics}, global_network_metrics={self.global_network_metrics})"
 
     def collect_all_metrics(self, parent_pid):
         process_manager = ProcessManager(parent_pid)
-        print(f"tracking process pid {process_manager.get_processes_pids}")
+        print(f"tracking process pid {process_manager.get_processes_pids()}")
         for pid in process_manager.get_processes_pids():
             if pid not in self.all_metrics:
-                self.all_metrics[pid] = []
-            self.all_metrics[pid].append(self.cpu_collector.collect_metric(pid, "cpu"))
-            self.all_metrics[pid].append(
+                self.all_metrics[pid] = {"cpu": [], "memory": [], "disk": []}
+            self.all_metrics[pid]["cpu"].append(
+                self.cpu_collector.collect_metric(pid, "cpu")
+            )
+            self.all_metrics[pid]["memory"].append(
                 self.memory_collector.collect_metric(pid, "memory")
             )
-            self.all_metrics[pid].append(
+            self.all_metrics[pid]["disk"].append(
                 self.disk_collector.collect_metric(pid, "disk")
             )
-            # Collect global network metrics and append them to the list
-            network_metric = self.network_collector.collect_metric(
-                "global_network", "network"
-            )
-            if "global_network" not in self.all_metrics:
-                self.all_metrics["global_network"] = []
-            self.all_metrics["global_network"].append(network_metric)
+
+        network_metric = self.network_collector.collect_metric(
+            "global_network", "network"
+        )
+        self.global_network_metrics.append(network_metric)
 
     def update(self, received_data):
         if not isinstance(received_data, MetricCollector):
             raise ValueError("Received data is not an instance of MetricCollector")
 
-        # Update the MetricCollector data
-        self.all_metrics.update(received_data.all_metrics)
+        self.global_network_metrics.extend(received_data.global_network_metrics)
+
+        for pid, metrics_by_type in received_data.all_metrics.items():
+            if pid not in self.all_metrics:
+                self.all_metrics[pid] = metrics_by_type
+            else:
+                for metric_type, metrics in metrics_by_type.items():
+                    self.all_metrics[pid][metric_type].extend(metrics)
 
     def to_dict(self):
         return {
-            pid: [metric.to_dict() for metric in metrics]
-            for pid, metrics in self.all_metrics.items()
+            "global_network": [
+                metric.to_dict() for metric in self.global_network_metrics
+            ],
+            "process_metrics": {
+                pid: {
+                    metric_type: [metric.to_dict() for metric in metrics]
+                    for metric_type, metrics in metrics_by_type.items()
+                }
+                for pid, metrics_by_type in self.all_metrics.items()
+            },
         }
 
 
