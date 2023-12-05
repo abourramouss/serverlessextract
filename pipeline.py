@@ -10,6 +10,8 @@ from lithops import Storage
 import numpy as np
 import pandas as pd
 import os
+from util import Profiler
+from util import StepProfiler
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -113,7 +115,7 @@ print(
     parameters["RebinningStep"]["input_data_path"].bucket,
     parameters["RebinningStep"]["input_data_path"].key,
 )
-runtime_memory = 1769
+runtime_memory = 1768
 chunk_size = storage.head_object(
     parameters["RebinningStep"]["input_data_path"].bucket,
     f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
@@ -121,7 +123,6 @@ chunk_size = storage.head_object(
 
 chunk_size = int(chunk_size["content-length"]) // MB
 print("Chunk size:", chunk_size)
-print("Parent pid: ", os.getpid())
 collection = ProfilerCollection()
 # Instantiate the singleton Profilercollection
 rebinning_profilers = RebinningStep(
@@ -129,6 +130,21 @@ rebinning_profilers = RebinningStep(
     parameters=parameters["RebinningStep"]["parameters"],
     output=parameters["RebinningStep"]["output"],
 ).run(func_limit=1, runtime_memory=runtime_memory)
+
+print(type(rebinning_profilers))
+rebinning_step_profiler = StepProfiler(
+    step_name="rebinning",
+    memory=1024,
+    chunk_size=256,
+    profilers=rebinning_profilers,
+)
+
+collection.add_step_profiler(
+    "rebinning", runtime_memory, chunk_size, rebinning_step_profiler
+)
+
+
+print(collection.to_dict())
 
 
 """

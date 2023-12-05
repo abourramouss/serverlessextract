@@ -1,59 +1,60 @@
 """This class serves as a container for multiple profilers, since there are multiple profilers outputted by each step and iterations, it serves as a higher level abstraction to simplify the code"""
 
 from util import Profiler
-from collections import namedtuple
 import json
+from dataclasses import dataclass
+from typing import List
+import time
+
+
+@dataclass
+class StepProfiler:
+    step_name: str
+    memory: int
+    chunk_size: int
+    profilers: List[Profiler]  # Ensure this is a list
+
+    def to_dict(self):
+        return {
+            "step_name": self.step_name,
+            "memory": self.memory,
+            "chunk_size": self.chunk_size,
+            "profilers": [profiler.to_dict() for profiler in self.profilers],
+        }
+
+    @staticmethod
+    def from_dict(data):
+        return StepProfiler(
+            step_name=data["step_name"],
+            memory=data["memory"],
+            chunk_size=data["chunk_size"],
+            profilers=[
+                Profiler.from_dict(profiler_data) for profiler_data in data["profilers"]
+            ],
+        )
 
 
 class ProfilerCollection:
     def __init__(self):
-        # Represents a dict of lists of profilers
-        self.profilers = {}
+        self.step_profilers = {}
 
-    def add_profilers(
-        self, step_name, runtime_size, chunk_size, iteration, profiler_list
-    ):
-        # If it already exists, update it, otherwise add it
-        step = self.profilers.setdefault(step_name, {})
-        runtime = step.setdefault(runtime_size, {})
-        chunk = runtime.setdefault(chunk_size, {})
-        chunk[iteration] = profiler_list
+    def add_step_profiler(self, step_name, memory, chunk_size, profilers):
+        if not isinstance(profilers, list):
+            raise TypeError("profilers should be a list of Profiler instances")
+        execution_id = f"{step_name}_{int(time.time())}"
+        step_profiler = StepProfiler(
+            step_name=step_name,
+            memory=memory,
+            chunk_size=chunk_size,
+            profilers=profilers,
+        )
+        self.step_profilers[execution_id] = step_profiler
 
-    def get_profilers(self, step_name, runtime_size, chunk_size, iteration):
-        return self.profilers[step_name][runtime_size][chunk_size][iteration]
+    def get_step_profiler(self, execution_id):
+        return self.step_profilers.get(execution_id)
 
     def to_dict(self):
         return {
-            step_name: {
-                runtime_size: {
-                    chunk_size: {
-                        iteration: [profiler.to_dict() for profiler in profiler_list]
-                        for iteration, profiler_list in chunk.items()
-                    }
-                    for chunk_size, chunk in runtime.items()
-                }
-                for runtime_size, runtime in step.items()
-            }
-            for step_name, step in self.profilers.items()
+            execution_id: step_profiler.to_dict()
+            for execution_id, step_profiler in self.step_profilers.items()
         }
-
-    def to_json(self):
-        return json.dumps(self.to_dict())
-
-    @classmethod
-    def from_json(cls, json_str):
-        data = json.loads(json_str)
-        profiler_collection = cls()
-        for step_name, step in data.items():
-            for runtime_size, runtime in step.items():
-                for chunk_size, chunk in runtime.items():
-                    for iteration, profiler_list in chunk.items():
-                        for profiler in profiler_list:
-                            profiler_collection.add_profilers(
-                                step_name,
-                                runtime_size,
-                                chunk_size,
-                                iteration,
-                                Profiler.from_dict(profiler),
-                            )
-        return profiler_collection
