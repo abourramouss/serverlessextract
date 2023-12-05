@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import os
 from util import Profiler
+from util import StepProfiler
 
 logger = logging.getLogger(__name__)
 setup_logging(logging.INFO)
@@ -122,7 +123,6 @@ chunk_size = storage.head_object(
 
 chunk_size = int(chunk_size["content-length"]) // MB
 print("Chunk size:", chunk_size)
-print("Parent pid: ", os.getpid())
 collection = ProfilerCollection()
 # Instantiate the singleton Profilercollection
 rebinning_profilers = RebinningStep(
@@ -131,11 +131,21 @@ rebinning_profilers = RebinningStep(
     output=parameters["RebinningStep"]["output"],
 ).run(func_limit=1, runtime_memory=runtime_memory)
 
-data = rebinning_profilers[0].to_dict()
-print(data)
-data = Profiler.from_dict(data, 1)
-print("-------------------------------")
-print(data)
+print(type(rebinning_profilers))
+rebinning_step_profiler = StepProfiler(
+    step_name="rebinning",
+    memory=1024,
+    chunk_size=256,
+    profilers=rebinning_profilers,
+)
+
+collection.add_step_profiler(
+    "rebinning", runtime_memory, chunk_size, rebinning_step_profiler
+)
+
+
+print(collection.to_dict())
+
 
 """
 
