@@ -111,6 +111,9 @@ parameters = {
 # Constants
 MB = 1024 * 1024
 storage = Storage()
+file_path = "profilers_data.json"
+collection = ProfilerCollection().load_from_file(file_path)
+
 print(
     parameters["RebinningStep"]["input_data_path"].bucket,
     parameters["RebinningStep"]["input_data_path"].key,
@@ -123,7 +126,6 @@ chunk_size = storage.head_object(
 
 chunk_size = int(chunk_size["content-length"]) // MB
 print("Chunk size:", chunk_size)
-collection = ProfilerCollection()
 # Instantiate the singleton Profilercollection
 rebinning_profilers = RebinningStep(
     input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
@@ -131,18 +133,13 @@ rebinning_profilers = RebinningStep(
     output=parameters["RebinningStep"]["output"],
 ).run(func_limit=1, runtime_memory=runtime_memory)
 
-print(type(rebinning_profilers))
-rebinning_step_profiler = StepProfiler(
-    step_name="rebinning",
-    memory=1024,
-    chunk_size=256,
-    profilers=rebinning_profilers,
-)
 
 collection.add_step_profiler(
-    "rebinning", runtime_memory, chunk_size, rebinning_step_profiler
+    RebinningStep.__name__, runtime_memory, chunk_size, rebinning_profilers
 )
 
+
+collection.save_to_file(file_path)
 
 print(collection.to_dict())
 
