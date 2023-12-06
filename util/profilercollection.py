@@ -4,7 +4,7 @@ from util import Profiler
 import json
 from dataclasses import dataclass
 from typing import List
-import time
+import os
 
 
 @dataclass
@@ -12,7 +12,7 @@ class StepProfiler:
     step_name: str
     memory: int
     chunk_size: int
-    profilers: List[Profiler]  # Ensure this is a list
+    profilers: List[Profiler]
 
     def to_dict(self):
         return {
@@ -22,9 +22,9 @@ class StepProfiler:
             "profilers": [profiler.to_dict() for profiler in self.profilers],
         }
 
-    @staticmethod
-    def from_dict(data):
-        return StepProfiler(
+    @classmethod
+    def from_dict(cls, data):
+        return cls(
             step_name=data["step_name"],
             memory=data["memory"],
             chunk_size=data["chunk_size"],
@@ -39,22 +39,90 @@ class ProfilerCollection:
         self.step_profilers = {}
 
     def add_step_profiler(self, step_name, memory, chunk_size, profilers):
-        if not isinstance(profilers, list):
-            raise TypeError("profilers should be a list of Profiler instances")
-        execution_id = f"{step_name}_{int(time.time())}"
-        step_profiler = StepProfiler(
-            step_name=step_name,
-            memory=memory,
-            chunk_size=chunk_size,
-            profilers=profilers,
-        )
-        self.step_profilers[execution_id] = step_profiler
+        key = (memory, chunk_size)
+        if step_name not in self.step_profilers:
+            self.step_profilers[step_name] = {}
+        if key not in self.step_profilers[step_name]:
+            self.step_profilers[step_name][key] = []
 
-    def get_step_profiler(self, execution_id):
-        return self.step_profilers.get(execution_id)
+        # Append new profiler list to the existing list of executions
+        self.step_profilers[step_name][key].append(profilers)
+
+    def get_step_profilers(self, step_name, memory, chunk_size):
+        key = (memory, chunk_size)
+        return self.step_profilers.get(step_name, {}).get(key, [])
 
     def to_dict(self):
         return {
-            execution_id: step_profiler.to_dict()
-            for execution_id, step_profiler in self.step_profilers.items()
+            step_name: {
+                str(key): [
+                    [profiler.to_dict() for profiler in profilers]
+                    for profilers in exec_list
+                ]
+                for key, exec_list in memory_chunk.items()
+            }
+            for step_name, memory_chunk in self.step_profilers.items()
         }
+
+    @classmethod
+    def from_dict(cls, data):
+        collection = cls()
+        for step_name, memory_chunk in data.items():
+            for key_str, exec_list in memory_chunk.items():
+                # Convert the string key back to a tuple
+                memory, chunk_size = map(int, key_str.strip("()").split(", "))
+                for profilers_data in exec_list:
+                    profilers = [
+                        Profiler.from_dict(profiler_data)
+                        for profiler_data in profilers_data
+                    ]
+                    collection.add_step_profiler(
+                        step_name, memory, chunk_size, profilers
+                    )
+        return collection
+
+    def save_to_file(self, file_path):
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"The file {file_path} does not exist.")
+
+        with open(file_path, "w") as file:
+            json.dump(self.to_dict(), file, indent=4)
+
+    @classmethod
+    def load_from_file(cls, file_path):
+        existing_collection = cls()
+
+        # Only attempt to load if the file exists and is not empty
+        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            try:
+                with open(file_path, "r") as file:
+                    data = json.load(file)
+                # Merge loaded data with existing data
+                for step_name, memory_chunk in data.items():
+                    for key_str, exec_list in memory_chunk.items():
+                        memory, chunk_size = map(int, key_str.strip("()").split(", "))
+                        for profilers_data in exec_list:
+                            profilers = [
+                                Profiler.from_dict(profiler_data)
+                                for profiler_data in profilers_data
+                            ]
+                            # Append to the existing data
+                            if (
+                                step_name in existing_collection.step_profilers
+                                and (memory, chunk_size)
+                                in existing_collection.step_profilers[step_name]
+                            ):
+                                existing_collection.step_profilers[step_name][
+                                    (memory, chunk_size)
+                                ].extend(profilers)
+                            else:
+                                existing_collection.add_step_profiler(
+                                    step_name, memory, chunk_size, profilers
+                                )
+            except json.JSONDecodeError:
+                # Handle invalid JSON
+                pass  # or raise an exception
+            except Exception as e:
+                raise RuntimeError(f"Error processing data from {file_path}: {e}")
+
+        return existing_collection
