@@ -14,6 +14,10 @@ class StepProfiler:
     chunk_size: int
     profilers: List[Profiler]
 
+    def __iter__(self):
+        for profiler in self.profilers:
+            yield profiler
+
     def to_dict(self):
         return {
             "step_name": self.step_name,
@@ -37,6 +41,13 @@ class StepProfiler:
 class ProfilerCollection:
     def __init__(self):
         self.step_profilers = {}
+
+    def __iter__(self):
+        for step_name, memory_chunk in self.step_profilers.items():
+            for key, exec_list in memory_chunk.items():
+                memory, chunk_size = key
+                for profilers in exec_list:
+                    yield StepProfiler(step_name, memory, chunk_size, profilers)
 
     def add_step_profiler(self, step_name, memory, chunk_size, profilers):
         key = (memory, chunk_size)

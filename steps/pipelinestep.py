@@ -63,6 +63,7 @@ class PipelineStep(ABC):
             keys.remove(f"{self.input_data_path.key}/")
         if func_limit:
             keys = keys[0:func_limit]
+
         s3_paths = [
             (
                 S3Path.from_bucket_key(
