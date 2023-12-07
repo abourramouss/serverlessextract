@@ -44,7 +44,6 @@ class RebinningStep(PipelineStep):
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
 
-        print(ms)
         # Profile the download_directory method
         partition_path = time_it(
             "download_ms", data_source.download_directory, time_records, ms
@@ -53,8 +52,6 @@ class RebinningStep(PipelineStep):
             "unzip", data_source.unzip, time_records, partition_path
         )
 
-        print("Partition path:", partition_path)
-        print(os.listdir(str(partition_path)))
         ms_name = str(partition_path).split("/")[-1]
 
         # Profile the download_file method
@@ -82,10 +79,7 @@ class RebinningStep(PipelineStep):
 
         # Profile the process execution
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
-        print(stdout)
-        print(stderr)
         posix_source = time_it("zip", data_source.zip, time_records, PosixPath(msout))
-        print(msout)
         # Profile the upload_directory method
         time_it(
             "upload_rebinnedms",

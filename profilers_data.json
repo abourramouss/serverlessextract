@@ -1,551 +1,365 @@
 {
     "RebinningStep": {
-        "(1768, 131)": [
+        "(1769, 131)": [
             [
                 {
                     "metrics": {
-                        "global_network": [
+                        "cpu_metrics": [
                             {
-                                "timestamp": 1701782073.1878116,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 146.82338619232178,
-                                    "net_write_mb": 3.2427616119384766
-                                }
+                                "timestamp": 1701949682.7058334,
+                                "pid": 78,
+                                "cpu_usage": 89.7
                             },
                             {
-                                "timestamp": 1701782073.6897326,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 208.21267318725586,
-                                    "net_write_mb": 3.348478317260742
-                                }
+                                "timestamp": 1701949683.209168,
+                                "pid": 78,
+                                "cpu_usage": 99.9
                             },
                             {
-                                "timestamp": 1701782074.1914823,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.516637802124,
-                                    "net_write_mb": 3.4167299270629883
-                                }
+                                "timestamp": 1701949683.7113216,
+                                "pid": 78,
+                                "cpu_usage": 69.9
                             },
                             {
-                                "timestamp": 1701782074.6933384,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5230960845947,
-                                    "net_write_mb": 3.4204177856445312
-                                }
+                                "timestamp": 1701949684.2131472,
+                                "pid": 78,
+                                "cpu_usage": 45.9
                             },
                             {
-                                "timestamp": 1701782075.7021873,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5230960845947,
-                                    "net_write_mb": 3.4204177856445312
-                                }
+                                "timestamp": 1701949684.7151427,
+                                "pid": 78,
+                                "cpu_usage": 0.0
                             },
                             {
-                                "timestamp": 1701782076.7051642,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5230960845947,
-                                    "net_write_mb": 3.4204177856445312
-                                }
+                                "timestamp": 1701949685.2160707,
+                                "pid": 94,
+                                "cpu_usage": 97.6
                             },
                             {
-                                "timestamp": 1701782077.7082062,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5230960845947,
-                                    "net_write_mb": 3.4204177856445312
-                                }
+                                "timestamp": 1701949685.7297568,
+                                "pid": 78,
+                                "cpu_usage": 0.0
                             },
                             {
-                                "timestamp": 1701782078.7222185,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5232582092285,
-                                    "net_write_mb": 3.420520782470703
-                                }
+                                "timestamp": 1701949686.230773,
+                                "pid": 94,
+                                "cpu_usage": 99.9
                             },
                             {
-                                "timestamp": 1701782079.7251475,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5233392715454,
-                                    "net_write_mb": 3.420520782470703
-                                }
+                                "timestamp": 1701949686.7328503,
+                                "pid": 78,
+                                "cpu_usage": 0.0
                             },
                             {
-                                "timestamp": 1701782080.7287176,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5515298843384,
-                                    "net_write_mb": 6.352341651916504
-                                }
+                                "timestamp": 1701949687.233876,
+                                "pid": 94,
+                                "cpu_usage": 97.9
                             },
                             {
-                                "timestamp": 1701782081.2305312,
-                                "pid": "global_network",
-                                "metric_type": "network",
-                                "value": {
-                                    "net_read_mb": 264.5520267486572,
-                                    "net_write_mb": 6.352982521057129
-                                }
+                                "timestamp": 1701949687.7359743,
+                                "pid": 78,
+                                "cpu_usage": 0.0
+                            },
+                            {
+                                "timestamp": 1701949688.248087,
+                                "pid": 94,
+                                "cpu_usage": 99.9
+                            },
+                            {
+                                "timestamp": 1701949688.7501855,
+                                "pid": 78,
+                                "cpu_usage": 0.0
+                            },
+                            {
+                                "timestamp": 1701949689.2512083,
+                                "pid": 94,
+                                "cpu_usage": 101.9
+                            },
+                            {
+                                "timestamp": 1701949689.753111,
+                                "pid": 78,
+                                "cpu_usage": 0.0
+                            },
+                            {
+                                "timestamp": 1701949690.7567325,
+                                "pid": 78,
+                                "cpu_usage": 26.0
                             }
                         ],
-                        "process_metrics": {
-                            "36": {
-                                "cpu": [
-                                    {
-                                        "timestamp": 1701782072.6864724,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 93.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782073.1887767,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 97.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782073.6904826,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 83.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782074.1923559,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 30.0
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782074.6943278,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 0.0
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782075.7032232,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 0.0
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782076.70614,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 0.0
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782077.7091167,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 0.0
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782078.7233346,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 0.0
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782079.726316,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 0.0
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782080.7295012,
-                                        "pid": 36,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 6.0
-                                        }
-                                    }
-                                ],
-                                "memory": [
-                                    {
-                                        "timestamp": 1701782073.1875565,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 100
-                                    },
-                                    {
-                                        "timestamp": 1701782073.6895628,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 115
-                                    },
-                                    {
-                                        "timestamp": 1701782074.191319,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782074.6931746,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782075.2009778,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782076.2040343,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782077.2069743,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782078.2209866,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782079.2241864,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782080.2273467,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 124
-                                    },
-                                    {
-                                        "timestamp": 1701782081.230364,
-                                        "pid": 36,
-                                        "metric_type": "memory",
-                                        "value": 123
-                                    }
-                                ],
-                                "disk": [
-                                    {
-                                        "timestamp": 1701782073.1877065,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.0,
-                                            "disk_write_mb": 12.08203125
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782073.6896632,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.0,
-                                            "disk_write_mb": 54.83203125
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782074.1914136,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 154.44921875
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782074.693271,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 262.7109375
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782075.2010736,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 262.7109375
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782076.2041507,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 262.7109375
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782077.20708,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 262.7109375
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782078.2210805,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 262.7109375
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782079.2242937,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 262.7109375
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782080.2274554,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 262.7109375
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782081.2304626,
-                                        "pid": 36,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.00390625,
-                                            "disk_write_mb": 279.98046875
-                                        }
-                                    }
-                                ]
+                        "memory_metrics": [
+                            {
+                                "timestamp": 1701949683.2079358,
+                                "pid": 78,
+                                "memory_usage": 100
                             },
-                            "52": {
-                                "cpu": [
-                                    {
-                                        "timestamp": 1701782075.2011423,
-                                        "pid": 52,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 99.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782076.204237,
-                                        "pid": 52,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 99.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782077.2071571,
-                                        "pid": 52,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 99.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782078.2211494,
-                                        "pid": 52,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 99.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782079.2243714,
-                                        "pid": 52,
-                                        "metric_type": "cpu",
-                                        "value": {
-                                            "cpu_usage": 99.9
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782080.2275317,
-                                        "pid": 52,
-                                        "metric_type": "cpu",
-                                        "value": null
-                                    }
-                                ],
-                                "memory": [
-                                    {
-                                        "timestamp": 1701782075.7019978,
-                                        "pid": 52,
-                                        "metric_type": "memory",
-                                        "value": 152
-                                    },
-                                    {
-                                        "timestamp": 1701782076.7049732,
-                                        "pid": 52,
-                                        "metric_type": "memory",
-                                        "value": 154
-                                    },
-                                    {
-                                        "timestamp": 1701782077.7080169,
-                                        "pid": 52,
-                                        "metric_type": "memory",
-                                        "value": 156
-                                    },
-                                    {
-                                        "timestamp": 1701782078.722025,
-                                        "pid": 52,
-                                        "metric_type": "memory",
-                                        "value": 156
-                                    },
-                                    {
-                                        "timestamp": 1701782079.7249653,
-                                        "pid": 52,
-                                        "metric_type": "memory",
-                                        "value": 158
-                                    },
-                                    {
-                                        "timestamp": 1701782080.7285218,
-                                        "pid": 52,
-                                        "metric_type": "memory",
-                                        "value": null
-                                    }
-                                ],
-                                "disk": [
-                                    {
-                                        "timestamp": 1701782075.7021158,
-                                        "pid": 52,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.0,
-                                            "disk_write_mb": 4.79296875
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782076.7050948,
-                                        "pid": 52,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.0,
-                                            "disk_write_mb": 4.79296875
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782077.7081265,
-                                        "pid": 52,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.0,
-                                            "disk_write_mb": 4.79296875
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782078.7221355,
-                                        "pid": 52,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.0,
-                                            "disk_write_mb": 4.79296875
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782079.7250693,
-                                        "pid": 52,
-                                        "metric_type": "disk",
-                                        "value": {
-                                            "disk_read_mb": 0.0,
-                                            "disk_write_mb": 4.79296875
-                                        }
-                                    },
-                                    {
-                                        "timestamp": 1701782080.7286541,
-                                        "pid": 52,
-                                        "metric_type": "disk",
-                                        "value": null
-                                    }
-                                ]
+                            {
+                                "timestamp": 1701949683.7100902,
+                                "pid": 78,
+                                "memory_usage": 114
+                            },
+                            {
+                                "timestamp": 1701949684.2121928,
+                                "pid": 78,
+                                "memory_usage": 121
+                            },
+                            {
+                                "timestamp": 1701949684.7139611,
+                                "pid": 78,
+                                "memory_usage": 123
+                            },
+                            {
+                                "timestamp": 1701949685.2158978,
+                                "pid": 78,
+                                "memory_usage": 123
+                            },
+                            {
+                                "timestamp": 1701949685.7285814,
+                                "pid": 94,
+                                "memory_usage": 152
+                            },
+                            {
+                                "timestamp": 1701949686.2305813,
+                                "pid": 78,
+                                "memory_usage": 123
+                            },
+                            {
+                                "timestamp": 1701949686.7316194,
+                                "pid": 94,
+                                "memory_usage": 155
+                            },
+                            {
+                                "timestamp": 1701949687.233686,
+                                "pid": 78,
+                                "memory_usage": 123
+                            },
+                            {
+                                "timestamp": 1701949687.7347188,
+                                "pid": 94,
+                                "memory_usage": 156
+                            },
+                            {
+                                "timestamp": 1701949688.2479038,
+                                "pid": 78,
+                                "memory_usage": 123
+                            },
+                            {
+                                "timestamp": 1701949688.7489452,
+                                "pid": 94,
+                                "memory_usage": 157
+                            },
+                            {
+                                "timestamp": 1701949689.2510397,
+                                "pid": 78,
+                                "memory_usage": 123
+                            },
+                            {
+                                "timestamp": 1701949689.75188,
+                                "pid": 94,
+                                "memory_usage": 157
+                            },
+                            {
+                                "timestamp": 1701949690.2539444,
+                                "pid": 78,
+                                "memory_usage": 123
+                            },
+                            {
+                                "timestamp": 1701949691.2575984,
+                                "pid": 78,
+                                "memory_usage": 126
                             }
-                        }
+                        ],
+                        "disk_metrics": [
+                            {
+                                "timestamp": 1701949683.208114,
+                                "pid": 78,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 8.0859375
+                            },
+                            {
+                                "timestamp": 1701949683.7102413,
+                                "pid": 78,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 55.0859375
+                            },
+                            {
+                                "timestamp": 1701949684.2122946,
+                                "pid": 78,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 130.0859375
+                            },
+                            {
+                                "timestamp": 1701949684.7140596,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 262.71484375
+                            },
+                            {
+                                "timestamp": 1701949685.2159982,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 262.71484375
+                            },
+                            {
+                                "timestamp": 1701949685.7286868,
+                                "pid": 94,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 4.79296875
+                            },
+                            {
+                                "timestamp": 1701949686.2306924,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 262.71484375
+                            },
+                            {
+                                "timestamp": 1701949686.731756,
+                                "pid": 94,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 4.79296875
+                            },
+                            {
+                                "timestamp": 1701949687.233797,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 262.71484375
+                            },
+                            {
+                                "timestamp": 1701949687.734825,
+                                "pid": 94,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 4.79296875
+                            },
+                            {
+                                "timestamp": 1701949688.2480154,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 262.71484375
+                            },
+                            {
+                                "timestamp": 1701949688.7490551,
+                                "pid": 94,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 4.79296875
+                            },
+                            {
+                                "timestamp": 1701949689.2511373,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 262.71484375
+                            },
+                            {
+                                "timestamp": 1701949689.751989,
+                                "pid": 94,
+                                "disk_read_mb": 0.0,
+                                "disk_write_mb": 4.79296875
+                            },
+                            {
+                                "timestamp": 1701949690.254051,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 262.71484375
+                            },
+                            {
+                                "timestamp": 1701949691.2576997,
+                                "pid": 78,
+                                "disk_read_mb": 0.00390625,
+                                "disk_write_mb": 279.984375
+                            }
+                        ],
+                        "network_metrics": [
+                            {
+                                "timestamp": 1701949683.2082345,
+                                "net_read_mb": 405.39933586120605,
+                                "net_write_mb": 9.66884708404541
+                            },
+                            {
+                                "timestamp": 1701949683.7104132,
+                                "net_read_mb": 468.56020164489746,
+                                "net_write_mb": 9.782167434692383
+                            },
+                            {
+                                "timestamp": 1701949684.212367,
+                                "net_read_mb": 528.2225275039673,
+                                "net_write_mb": 9.849847793579102
+                            },
+                            {
+                                "timestamp": 1701949684.7141302,
+                                "net_read_mb": 529.36061668396,
+                                "net_write_mb": 9.85505199432373
+                            },
+                            {
+                                "timestamp": 1701949685.7287598,
+                                "net_read_mb": 529.36061668396,
+                                "net_write_mb": 9.85505199432373
+                            },
+                            {
+                                "timestamp": 1701949686.731828,
+                                "net_read_mb": 529.36061668396,
+                                "net_write_mb": 9.85505199432373
+                            },
+                            {
+                                "timestamp": 1701949687.7349026,
+                                "net_read_mb": 529.3606567382812,
+                                "net_write_mb": 9.85509204864502
+                            },
+                            {
+                                "timestamp": 1701949688.7491345,
+                                "net_read_mb": 529.360818862915,
+                                "net_write_mb": 9.855195045471191
+                            },
+                            {
+                                "timestamp": 1701949689.7520678,
+                                "net_read_mb": 529.360818862915,
+                                "net_write_mb": 9.855195045471191
+                            },
+                            {
+                                "timestamp": 1701949690.7558396,
+                                "net_read_mb": 529.361743927002,
+                                "net_write_mb": 9.85582447052002
+                            },
+                            {
+                                "timestamp": 1701949691.2577765,
+                                "net_read_mb": 529.3901424407959,
+                                "net_write_mb": 12.78558349609375
+                            }
+                        ]
                     },
                     "function_timers": [
                         {
                             "label": "download_ms",
-                            "start_time": 1701782072.7048783,
-                            "end_time": 1701782074.1612885,
-                            "duration": 1.4564101696014404
+                            "start_time": 1701949682.7219856,
+                            "end_time": 1701949684.3630872,
+                            "duration": 1.641101598739624
                         },
                         {
                             "label": "unzip",
-                            "start_time": 1701782074.1613755,
-                            "end_time": 1701782074.3468122,
-                            "duration": 0.18543672561645508
+                            "start_time": 1701949684.363178,
+                            "end_time": 1701949684.5483828,
+                            "duration": 0.18520474433898926
                         },
                         {
                             "label": "download_parameters",
-                            "start_time": 1701782074.3469934,
-                            "end_time": 1701782074.3825674,
-                            "duration": 0.03557395935058594
+                            "start_time": 1701949684.5485547,
+                            "end_time": 1701949684.6209564,
+                            "duration": 0.07240176200866699
                         },
                         {
                             "label": "execute_script",
-                            "start_time": 1701782074.3881364,
-                            "end_time": 1701782080.3623986,
-                            "duration": 5.974262237548828
+                            "start_time": 1701949684.6267428,
+                            "end_time": 1701949690.5954385,
+                            "duration": 5.968695640563965
                         },
                         {
                             "label": "zip",
-                            "start_time": 1701782080.3629513,
-                            "end_time": 1701782080.5893588,
-                            "duration": 0.22640752792358398
+                            "start_time": 1701949690.5958707,
+                            "end_time": 1701949690.822858,
+                            "duration": 0.22698736190795898
                         },
                         {
                             "label": "upload_rebinnedms",
-                            "start_time": 1701782080.5895352,
-                            "end_time": 1701782080.7441876,
-                            "duration": 0.15465235710144043
+                            "start_time": 1701949690.8230042,
+                            "end_time": 1701949691.044302,
+                            "duration": 0.2212977409362793
                         }
                     ]
                 }
