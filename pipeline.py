@@ -2,9 +2,11 @@ from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
 from steps.imaging import imaging, monitor_and_run_imaging
 from s3path import S3Path
-from util import ProfilerCollection
+from util import ProfilerCollection, CPUMetric, MemoryMetric, DiskMetric, NetworkMetric
 from lithops import Storage
-
+import matplotlib.pyplot as plt
+import numpy as np
+import os
 
 parameters = {
     "RebinningStep": {
@@ -99,15 +101,17 @@ parameters = {
 # 1769, 3538, 5308, 7076, 10240
 # Constants
 MB = 1024 * 1024
+
+
+"""
 storage = Storage()
-file_path = "profilers_data.json"
-collection = ProfilerCollection().load_from_file(file_path)
+
 
 print(
     parameters["RebinningStep"]["input_data_path"].bucket,
     parameters["RebinningStep"]["input_data_path"].key,
 )
-runtime_memory = 1769
+runtime_memory = 1768
 chunk_size = storage.head_object(
     parameters["RebinningStep"]["input_data_path"].bucket,
     f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
@@ -120,13 +124,18 @@ rebinning_profilers = RebinningStep(
     input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
     parameters=parameters["RebinningStep"]["parameters"],
     output=parameters["RebinningStep"]["output"],
-).run(func_limit=1, runtime_memory=runtime_memory)
+).run(func_limit=2, runtime_memory=runtime_memory)
+
+"""
 
 
-collection.add_step_profiler(
-    RebinningStep.__name__, runtime_memory, chunk_size, rebinning_profilers
-)
+file_path = "profilers_data.json"
+collection = ProfilerCollection().load_from_file(file_path)
 
-collection.save_to_file(file_path)
 
-print(collection.to_dict())
+for step_profiler in collection:
+    for profiler in step_profiler:
+        print("------------------")
+        for metric in profiler:
+            print(metric)
+        print("-------------------")
