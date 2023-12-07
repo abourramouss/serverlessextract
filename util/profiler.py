@@ -4,8 +4,46 @@ import os
 from multiprocessing import Process, Pipe
 import contextlib
 import json
-from dataclasses import dataclass, asdict
-from typing import Dict
+from dataclasses import dataclass, asdict, fields
+
+
+@dataclass
+class BaseMetric:
+    timestamp: float
+
+    def __lt__(self, other):
+        if not isinstance(other, BaseMetric):
+            return NotImplemented
+        return self.timestamp < other.timestamp
+
+    def __add__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                f"Cannot add different metric types: {type(self).__name__} and {type(other).__name__}"
+            )
+        new_data = {
+            field.name: (getattr(self, field.name) + getattr(other, field.name)) / 2
+            for field in fields(self)
+        }
+        return self.__class__(**new_data)
+
+    def __truediv__(self, number):
+        if not isinstance(number, (int, float)):
+            return NotImplemented
+        new_data = {
+            field.name: getattr(self, field.name) / number for field in fields(self)
+        }
+        return self.__class__(**new_data)
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(f'{field.name}={getattr(self, field.name)}' for field in fields(self))})"
 
 
 def time_it(label, function, time_records, *args, **kwargs):
@@ -61,72 +99,31 @@ class FunctionTimer:
 
 
 @dataclass
-class CPUMetric:
-    timestamp: float
+class CPUMetric(BaseMetric):
     pid: int
     cpu_usage: float
-
-    def to_dict(self):
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def __repr__(self):
-        return f"CPUMetric(timestamp={self.timestamp}, pid={self.pid}, cpu_usage={self.cpu_usage})"
+    # Inherits methods from BaseMetric
 
 
 @dataclass
-class MemoryMetric:
-    timestamp: float
+class MemoryMetric(BaseMetric):
     pid: int
     memory_usage: float
-
-    def to_dict(self):
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def __repr__(self):
-        return f"MemoryMetric(timestamp={self.timestamp}, pid={self.pid}, memory_usage={self.memory_usage})"
+    # Inherits methods from BaseMetric
 
 
 @dataclass
-class DiskMetric:
-    timestamp: float
+class DiskMetric(BaseMetric):
     pid: int
     disk_read_mb: float
     disk_write_mb: float
-
-    def to_dict(self):
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def __repr__(self):
-        return f"DiskMetric(timestamp={self.timestamp}, pid={self.pid}, disk_read_mb={self.disk_read_mb}, disk_write_mb={self.disk_write_mb})"
+    # Inherits methods from BaseMetric
 
 
 @dataclass
-class NetworkMetric:
-    timestamp: float
+class NetworkMetric(BaseMetric):
     net_read_mb: float
     net_write_mb: float
-
-    def to_dict(self):
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def __repr__(self):
-        return f"NetworkMetric(timestamp={self.timestamp}, net_read_mb={self.net_read_mb}, net_write_mb={self.net_write_mb})"
 
 
 class IMetricCollector:
