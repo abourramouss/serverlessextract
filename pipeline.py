@@ -2,15 +2,13 @@ from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
 from steps.imaging import imaging, monitor_and_run_imaging
 from s3path import S3Path
-from util import ProfilerCollection, CPUMetric, MemoryMetric, DiskMetric, NetworkMetric
+from util import ProfilerCollection
 from lithops import Storage
-import matplotlib.pyplot as plt
-import numpy as np
-import os
+
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_61zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_30zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -103,10 +101,10 @@ parameters = {
 MB = 1024 * 1024
 
 
-"""
 storage = Storage()
 
-
+file_path = "profilers_data.json"
+collection = ProfilerCollection().load_from_file(file_path)
 print(
     parameters["RebinningStep"]["input_data_path"].bucket,
     parameters["RebinningStep"]["input_data_path"].key,
@@ -124,14 +122,17 @@ rebinning_profilers = RebinningStep(
     input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
     parameters=parameters["RebinningStep"]["parameters"],
     output=parameters["RebinningStep"]["output"],
-).run(func_limit=2, runtime_memory=runtime_memory)
-
-"""
+).run(func_limit=1, runtime_memory=runtime_memory)
 
 
-file_path = "profilers_data.json"
-collection = ProfilerCollection().load_from_file(file_path)
+collection.add_step_profiler(
+    RebinningStep.__name__, runtime_memory, chunk_size, rebinning_profilers
+)
 
+
+collection.save_to_file(file_path)
+
+print(collection.to_dict())
 
 for step_profiler in collection:
     for profiler in step_profiler:
