@@ -5,3 +5,4 @@ extract/
 *env/
 .vscode/settings.json
 *.png
+profilers_data.json
