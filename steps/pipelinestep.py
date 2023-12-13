@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
 import time
-from util import profiling_context
+from profiling import profiling_context
 
 
 class PipelineStep(ABC):

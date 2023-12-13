@@ -305,10 +305,19 @@ class Profiler:
     @classmethod
     def from_dict(cls, data):
         profiler = cls()
-        profiler.metrics = MetricCollector.from_dict(data["metrics"])
-        profiler.function_timers = [
-            FunctionTimer.from_dict(timer) for timer in data["function_timers"]
-        ]
+
+        if "metrics" in data:
+            # If 'metrics' key is present, this is the expected structure
+            profiler.metrics = MetricCollector.from_dict(data["metrics"])
+        else:
+            # If 'metrics' key is not present, handle data as metrics directly
+            profiler.metrics = MetricCollector.from_dict(data)
+
+        if "function_timers" in data:
+            profiler.function_timers = [
+                FunctionTimer.from_dict(timer) for timer in data["function_timers"]
+            ]
+
         return profiler
 
     def __repr__(self):
