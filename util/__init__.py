@@ -3,14 +3,5 @@ from .helpers import (
     dict_to_parset,
     setup_logging,
 )
-from .profiler import (
-    Profiler,
-    profiling_context,
-    time_it,
-    CPUMetric,
-    MemoryMetric,
-    DiskMetric,
-    NetworkMetric,
-)
+
 from .profilerplotter import ProfilerPlotter
-from .profilercollection import ProfilerCollection, StepProfiler

@@ -4,7 +4,8 @@ from typing import Dict, List, Optional
 from s3path import S3Path
 from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
-from util import dict_to_parset, time_it
+from util import dict_to_parset
+from profiling import time_it
 import logging
 import os
 from pathlib import PosixPath
