@@ -226,6 +226,12 @@ class MetricCollector:
         self.disk_metrics = []
         self.network_metrics = []
 
+    def __len__(self):
+        min_len = min(
+            len(self.cpu_metrics), len(self.memory_metrics), len(self.disk_metrics)
+        )
+        return min_len
+
     def __iter__(self):
         for metric in self.cpu_metrics:
             yield metric
@@ -297,6 +303,9 @@ class Profiler:
     def __init__(self):
         self.metrics = MetricCollector()
         self.function_timers = []
+
+    def __len__(self):
+        return len(self.metrics)
 
     def __iter__(self):
         for metric in self.metrics:
