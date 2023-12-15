@@ -14,6 +14,9 @@ class StepProfiler:
     chunk_size: int
     profilers: List[Profiler]
 
+    def __len__(self):
+        return len(self.profilers)
+
     def __repr__(self) -> str:
         return f"StepProfiler({self.step_name}, {self.memory}, {self.chunk_size}, {self.profilers})"
 
