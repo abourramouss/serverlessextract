@@ -337,15 +337,18 @@ class Profiler:
     def start_profiling(self, conn, parent_pid):
         index = 0
         while True:
-            if conn.poll():  # This is non-blocking
+            # Collect metrics at the start of each loop iteration
+            self.metrics.collect_all_metrics(parent_pid, index)
+            index += 1
+
+            if conn.poll():
                 message = conn.recv()
                 if message == "stop":
-                    print("Received stop signal, stopping profiling.")
+                    print("Received stop signal, completing current data collection.")
+                    self.metrics.collect_all_metrics(parent_pid, index)
                     conn.send(self)
                     conn.close()
                     break
-            self.metrics.collect_all_metrics(parent_pid, index)
-            index += 1
 
     def update(self, received_data):
         if not isinstance(received_data, Profiler):
