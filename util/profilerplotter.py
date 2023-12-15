@@ -353,7 +353,7 @@ class ProfilerPlotter:
         )
         table.auto_set_font_size(False)
         table.set_fontsize(10)
-        table.scale(1, 1.5)  # Adjust table scale if needed
+        table.scale(1, 1.5)
 
         # Set the legend outside the plot
         ax.legend(

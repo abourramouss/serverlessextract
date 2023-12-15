@@ -139,7 +139,7 @@ class IMetricCollector:
 class CPUMetricCollector(IMetricCollector):
     def _collect(self, pid, timestamp, collection_id):
         try:
-            cpu_usage = psutil.Process(pid).cpu_percent(interval=0.5)
+            cpu_usage = psutil.Process(pid).cpu_percent(interval=0.3)
             return CPUMetric(
                 timestamp=timestamp,
                 pid=pid,
@@ -226,6 +226,12 @@ class MetricCollector:
         self.disk_metrics = []
         self.network_metrics = []
 
+    def __len__(self):
+        min_len = min(
+            len(self.cpu_metrics), len(self.memory_metrics), len(self.disk_metrics)
+        )
+        return min_len
+
     def __iter__(self):
         for metric in self.cpu_metrics:
             yield metric
@@ -298,6 +304,9 @@ class Profiler:
         self.metrics = MetricCollector()
         self.function_timers = []
 
+    def __len__(self):
+        return len(self.metrics)
+
     def __iter__(self):
         for metric in self.metrics:
             yield metric
@@ -328,15 +337,18 @@ class Profiler:
     def start_profiling(self, conn, parent_pid):
         index = 0
         while True:
-            if conn.poll():  # This is non-blocking
+            # Collect metrics at the start of each loop iteration
+            self.metrics.collect_all_metrics(parent_pid, index)
+            index += 1
+
+            if conn.poll():
                 message = conn.recv()
                 if message == "stop":
-                    print("Received stop signal, stopping profiling.")
+                    print("Received stop signal, completing current data collection.")
+                    self.metrics.collect_all_metrics(parent_pid, index)
                     conn.send(self)
                     conn.close()
                     break
-            self.metrics.collect_all_metrics(parent_pid, index)
-            index += 1
 
     def update(self, received_data):
         if not isinstance(received_data, Profiler):
