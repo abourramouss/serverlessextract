@@ -4,7 +4,7 @@ from steps.imaging import imaging, monitor_and_run_imaging
 from s3path import S3Path
 from profiling import ProfilerCollection
 from lithops import Storage
-from plot import aggregate_and_plot, plot_gantt
+from plot import aggregate_and_plot, plot_gantt, average_and_plot
 
 parameters = {
     "RebinningStep": {
@@ -133,6 +133,15 @@ collection.add_step_profiler(
     RebinningStep.__name__, runtime_memory, chunk_size, rebinning_profilers
 )
 
+
+print("===========================================")
+for step_profiler in collection:
+    for profiler in step_profiler:
+        print(profiler)
+print("===========================================")
+
+
 collection.save_to_file(file_path)
-aggregate_and_plot(collection, "plots", "rebinning.png")
+aggregate_and_plot(collection, "plots", "rebinning_aggregate.png")
+average_and_plot(collection, "plots", "rebinning_average.png")
 plot_gantt(collection, "plots")
