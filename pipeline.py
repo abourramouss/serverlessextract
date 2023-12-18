@@ -8,7 +8,7 @@ from plot import aggregate_and_plot, plot_gantt, average_and_plot
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_61zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_15zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -105,22 +105,17 @@ storage = Storage()
 
 file_path = "profilers_data.json"
 collection = ProfilerCollection().load_from_file(file_path)
-print("Collection:")
-print(collection)
-
-print(
-    parameters["RebinningStep"]["input_data_path"].bucket,
-    parameters["RebinningStep"]["input_data_path"].key,
-)
 
 
-runtime_memory = 1768
+runtime_memory = 3008
 chunk_size = storage.head_object(
     parameters["RebinningStep"]["input_data_path"].bucket,
     f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
 )
 
 chunk_size = int(chunk_size["content-length"]) // MB
+
+
 print("Chunk size:", chunk_size)
 # Instantiate the singleton Profilercollection
 rebinning_profilers = RebinningStep(
@@ -133,15 +128,12 @@ collection.add_step_profiler(
     RebinningStep.__name__, runtime_memory, chunk_size, rebinning_profilers
 )
 
-
-print("===========================================")
-for step_profiler in collection:
-    for profiler in step_profiler:
-        print(profiler)
-print("===========================================")
-
-
 collection.save_to_file(file_path)
-aggregate_and_plot(collection, "plots", "rebinning_aggregate.png")
-average_and_plot(collection, "plots", "rebinning_average.png")
-plot_gantt(collection, "plots")
+
+aggregate_and_plot(
+    collection, "rebinning", "rebinning_aggregate.png", runtime_memory, chunk_size
+)
+average_and_plot(
+    collection, "rebinning", "rebinning_average.png", runtime_memory, chunk_size
+)
+plot_gantt(collection, "rebinning", "rebinning_gantt.png", runtime_memory, chunk_size)
