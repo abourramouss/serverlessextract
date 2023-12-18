@@ -3,5 +3,3 @@ from .helpers import (
     dict_to_parset,
     setup_logging,
 )
-
-from .profilerplotter import ProfilerPlotter
