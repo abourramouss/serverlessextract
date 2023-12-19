@@ -1,6 +1,8 @@
-import matplotlib.pyplot as plt
 import os
 from collections import defaultdict
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.cm as cm
 
 
 def aggregate_and_plot(
@@ -301,3 +303,81 @@ def plot_gantt(collection, save_dir, filename, specified_memory, specified_chunk
     plt.tight_layout()
     plt.savefig(save_path, bbox_inches="tight")
     print(f"Plot saved to: {save_path}")
+
+
+def plot_cost_vs_time_from_collection(collection, save_dir):
+    cost_per_ms_per_mb = 0.0000000167  # Cost per millisecond per MB
+    grouped_profilers = defaultdict(list)
+
+    # Group the profilers by (memory, chunk_size) and sum their execution times
+    for step_profiler in collection:
+        for profiler in step_profiler.profilers:
+            total_time = sum(timer.duration for timer in profiler.function_timers)
+            grouped_profilers[(step_profiler.memory, step_profiler.chunk_size)].append(
+                total_time
+            )
+
+    # Calculate the average execution time and cost for each group
+    average_times = {}
+    costs = {}
+    for (memory, chunk_size), times in grouped_profilers.items():
+        avg_time = sum(times) / len(times)
+        average_times[(memory, chunk_size)] = avg_time
+        costs[(memory, chunk_size)] = avg_time * cost_per_ms_per_mb * memory
+
+    # Prepare the plot
+    plt.figure(figsize=(15, 10))
+    colors = cm.rainbow(
+        np.linspace(0, 1, len(set(chunk_size for _, chunk_size in grouped_profilers)))
+    )
+    chunk_colors = {
+        chunk_size: color
+        for chunk_size, color in zip(
+            set(chunk_size for _, chunk_size in grouped_profilers), colors
+        )
+    }
+
+    # Plot the points and connect them with lines
+    for (memory, chunk_size), cost in costs.items():
+        exec_time = average_times[(memory, chunk_size)]
+        plt.scatter(
+            exec_time,
+            cost,
+            color=chunk_colors[chunk_size],
+            label=f"{chunk_size} MB Chunk, {memory} MB Memory",
+        )
+        plt.text(
+            exec_time,
+            cost,
+            f"{chunk_size} MB, {memory} MB",
+            fontsize=9,
+            ha="center",
+            va="bottom",
+        )
+
+    # Connect points with the same chunk size
+    for chunk_size, color in chunk_colors.items():
+        sorted_memories = sorted(
+            (memory for memory, size in average_times if size == chunk_size),
+            reverse=True,
+        )
+        plt.plot(
+            [average_times[(memory, chunk_size)] for memory in sorted_memories],
+            [costs[(memory, chunk_size)] for memory in sorted_memories],
+            color=color,
+            linestyle="-",
+        )
+
+    plt.xlabel("Execution Time (seconds)")
+    plt.ylabel("Cost")
+    plt.title(
+        "Cost vs Execution Time for Various Chunk Sizes and Memory Configurations"
+    )
+    plt.legend(loc="upper right")
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Save the plot
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(os.path.join(save_dir, "cost_vs_time_profiler_collection.png"))
+    plt.close()
