@@ -309,75 +309,54 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
     cost_per_ms_per_mb = 0.0000000167  # Cost per millisecond per MB
     grouped_profilers = defaultdict(list)
 
+    # Calculate the unique number of chunk sizes for color mapping
+    unique_chunk_sizes = set(step_profiler.chunk_size for step_profiler in collection)
+    colors = plt.cm.rainbow(
+        np.linspace(0, 1, len(unique_chunk_sizes))
+    )  # Unique color for each chunk size
+    color_map = {
+        chunk_size: color for chunk_size, color in zip(unique_chunk_sizes, colors)
+    }
+
     # Group the profilers by (memory, chunk_size) and sum their execution times
     for step_profiler in collection:
         for profiler in step_profiler.profilers:
             total_time = sum(timer.duration for timer in profiler.function_timers)
-            grouped_profilers[(step_profiler.memory, step_profiler.chunk_size)].append(
-                total_time
+            cost = total_time * 1000 * cost_per_ms_per_mb * step_profiler.memory / 1024
+            grouped_profilers[step_profiler.chunk_size].append(
+                (step_profiler.memory, total_time, cost)
             )
 
-    # Calculate the average execution time and cost for each group
-    average_times = {}
-    costs = {}
-    for (memory, chunk_size), times in grouped_profilers.items():
-        avg_time = sum(times) / len(times)
-        average_times[(memory, chunk_size)] = avg_time
-        costs[(memory, chunk_size)] = avg_time * cost_per_ms_per_mb * memory
+        print(
+            f"Chunk size: {step_profiler.chunk_size}, Memory: {step_profiler.memory}, Profilers: {len(step_profiler.profilers)}"
+        )
 
-    # Prepare the plot
     plt.figure(figsize=(15, 10))
-    colors = cm.rainbow(
-        np.linspace(0, 1, len(set(chunk_size for _, chunk_size in grouped_profilers)))
-    )
-    chunk_colors = {
-        chunk_size: color
-        for chunk_size, color in zip(
-            set(chunk_size for _, chunk_size in grouped_profilers), colors
-        )
-    }
-
-    # Plot the points and connect them with lines
-    for (memory, chunk_size), cost in costs.items():
-        exec_time = average_times[(memory, chunk_size)]
-        plt.scatter(
-            exec_time,
-            cost,
-            color=chunk_colors[chunk_size],
-            label=f"{chunk_size} MB Chunk, {memory} MB Memory",
-        )
-        plt.text(
-            exec_time,
-            cost,
-            f"{chunk_size} MB, {memory} MB",
-            fontsize=9,
-            ha="center",
-            va="bottom",
-        )
-
-    # Connect points with the same chunk size
-    for chunk_size, color in chunk_colors.items():
-        sorted_memories = sorted(
-            (memory for memory, size in average_times if size == chunk_size),
-            reverse=True,
-        )
-        plt.plot(
-            [average_times[(memory, chunk_size)] for memory in sorted_memories],
-            [costs[(memory, chunk_size)] for memory in sorted_memories],
-            color=color,
-            linestyle="-",
-        )
-
-    plt.xlabel("Execution Time (seconds)")
-    plt.ylabel("Cost")
     plt.title(
         "Cost vs Execution Time for Various Chunk Sizes and Memory Configurations"
     )
-    plt.legend(loc="upper right")
+
+    # Plot the points and connect them with lines
+    for chunk_size, data_points in grouped_profilers.items():
+        data_points.sort()  # Sort by memory size
+        memories, times, costs = zip(*data_points)
+        color = color_map[chunk_size]
+        plt.scatter(times, costs, color=color, label=f"{chunk_size} MB Chunk")
+        plt.plot(times, costs, color=color)  # Line connecting the points
+
+        # Label each point with its runtime memory size
+        for mem, time, cost in data_points:
+            plt.text(time, cost, f"{mem} MB", fontsize=9, ha="right", va="bottom")
+
+    plt.xlabel("Execution Time (seconds)")
+    plt.ylabel("Cost")
+    plt.legend()
     plt.grid(True)
     plt.tight_layout()
 
     # Save the plot
+    save_path = os.path.join(save_dir, "cost_vs_time_profiler_collection.png")
     os.makedirs(save_dir, exist_ok=True)
-    plt.savefig(os.path.join(save_dir, "cost_vs_time_profiler_collection.png"))
+    plt.savefig(save_path)
     plt.close()
+    print(f"Plot saved to: {save_path}")
