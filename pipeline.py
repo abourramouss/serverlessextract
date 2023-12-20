@@ -149,6 +149,8 @@ plot_cost_vs_time_from_collection(collection, "rebinning")
 
 
 input_data_paths = [
+    "/ayman-extract/partitions/partitions_7zip",
+    "/ayman-extract/partitions/partitions_3zip",
     "/ayman-extract/partitions/partitions_2zip",
 ]
 
@@ -157,14 +159,15 @@ file_path = "profilers_data.json"
 collection = ProfilerCollection().load_from_file(file_path)
 plot_cost_vs_time_from_collection(collection, "rebinning")
 
-runtime_memories = [3538, 5308, 7076, 10240]
+runtime_memories = [1769, 3538, 5308, 7076, 10240]
 MB = 1024 * 1024
 storage = Storage()
 file_path = "profilers_data.json"
-constant = 100
+constant = 700
 
-for mem in runtime_memories:
-    for path in input_data_paths:
+for path in input_data_paths:
+    for mem in runtime_memories:
+        parameters["RebinningStep"]["input_data_path"] = S3Path(path)
         chunk_size = storage.head_object(
             parameters["RebinningStep"]["input_data_path"].bucket,
             f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
@@ -178,7 +181,6 @@ for mem in runtime_memories:
             continue
 
         collection = ProfilerCollection().load_from_file(file_path)
-        parameters["RebinningStep"]["input_data_path"] = S3Path(path)
 
         rebinning_profilers = RebinningStep(
             input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
@@ -190,5 +192,4 @@ for mem in runtime_memories:
             RebinningStep.__name__, mem, chunk_size, rebinning_profilers
         )
         collection.save_to_file(file_path)
-
-plot_cost_vs_time_from_collection(collection, "rebinning")
+        plot_cost_vs_time_from_collection(collection, "rebinning")
