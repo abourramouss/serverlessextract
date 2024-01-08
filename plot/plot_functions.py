@@ -356,6 +356,41 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
         for mem, time, cost in zip(memories, times, costs):
             plt.text(time, cost, f"{mem} MB", fontsize=9, ha="right", va="bottom")
 
+    all_costs = [
+        cost for values in averaged_profilers.values() for cost in values["costs"]
+    ]
+    all_times = [
+        time for values in averaged_profilers.values() for time in values["times"]
+    ]
+
+    max_cost = max(all_costs)
+    max_time = max(all_times)
+
+    print("Max cost:", max_cost)
+    for cost in values["costs"]:
+        print(cost)
+    min_sum = float("inf")
+    best_config = None
+    for (mem, chunk_size), values in averaged_profilers.items():
+        normalized_costs = [cost / max_cost for cost in values["costs"]]
+        normalized_times = [time / max_time for time in values["times"]]
+
+        for time, cost in zip(normalized_times, normalized_costs):
+            suma = time + cost
+            if suma < min_sum:
+                min_sum = suma
+                best_config = (mem, chunk_size)
+
+    memory, chunk_size = best_config
+    average_time, average_cost = averaged_data[chunk_size][memory]
+    plt.scatter(
+        [average_time],
+        [average_cost],
+        color="black",
+        s=100,
+        edgecolor="yellow",
+        zorder=5,
+    )
     plt.xlabel("Execution Time (seconds)")
     plt.ylabel("Cost")
     plt.legend()
