@@ -43,7 +43,7 @@ class PipelineStep(ABC):
             command_args = kwargs["args"]
         else:
             raise ValueError("Expected 'args' key with a tuple value in kwargs")
-        # Yields a profiler object, essentially what it does is create a new process for profiling, since multithreading wasn't working properly due to the GIL
+        # Yields a profiler object, creates a new process for profiling.
         with profiling_context() as profiler:
             function_timers = self.build_command(*command_args)
         profiler.function_timers = function_timers
@@ -78,6 +78,7 @@ class PipelineStep(ABC):
         futures = function_executor.map(
             self._execute_step, s3_paths, extra_env=extra_env
         )
+        print("Waiting for futures to complete", futures)
         results = function_executor.get_result(futures)
         return results
 
