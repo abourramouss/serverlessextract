@@ -152,8 +152,8 @@ input_data_paths = [
     "/ayman-extract/partitions/partitions_30zip",
     "/ayman-extract/partitions/partitions_15zip",
     "/ayman-extract/partitions/partitions_7zip",
-    # "/ayman-extract/partitions/partitions_3zip",
-    # "/ayman-extract/partitions/partitions_2zip",
+    "/ayman-extract/partitions/partitions_3zip",
+    "/ayman-extract/partitions/partitions_2zip",
 ]
 
 file_path = "profilers_data.json"
