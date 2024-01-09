@@ -305,10 +305,23 @@ def plot_gantt(collection, save_dir, filename, specified_memory, specified_chunk
     print(f"Plot saved to: {save_path}")
 
 
+def normalize(data):
+    """Normalize the data to the range [0, 1]."""
+    min_val = np.min(data)
+    max_val = np.max(data)
+    return (data - min_val) / (max_val - min_val)
+
+
+def calculate_distance_to_origin(cost, time):
+    """Calculate Euclidean distance from the origin."""
+    return np.sqrt(cost**2 + time**2)
+
+
 def plot_cost_vs_time_from_collection(collection, save_dir):
     cost_per_ms_per_mb = 0.0000000167
     averaged_profilers = defaultdict(lambda: defaultdict(list))
 
+    # Process the collection data
     for step_profiler in collection:
         for profiler in step_profiler.profilers:
             total_time = sum(timer.duration for timer in profiler.function_timers)
@@ -319,20 +332,14 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
             averaged_profilers[key]["times"].append(total_time)
             averaged_profilers[key]["costs"].append(cost)
 
-            print(
-                f"Processing: Memory={step_profiler.memory}, Chunk Size={step_profiler.chunk_size}, Time={total_time}, Cost={cost}"
-            )
-
+    # Average the data
     averaged_data = defaultdict(dict)
     for (memory, chunk_size), values in averaged_profilers.items():
         average_time = sum(values["times"]) / len(values["times"])
         average_cost = sum(values["costs"]) / len(values["costs"])
         averaged_data[chunk_size][memory] = (average_time, average_cost)
 
-        print(
-            f"Averaged: Memory={memory}, Chunk Size={chunk_size}, Average Time={average_time}, Average Cost={average_cost}"
-        )
-
+    # Setup the plot
     plt.figure(figsize=(15, 10))
     plt.title(
         "Cost vs Execution Time for Various Chunk Sizes and Memory Configurations"
@@ -348,49 +355,39 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
         times, costs, memories = zip(
             *[(time, cost, mem) for mem, (time, cost) in memory_data.items()]
         )
+        normalized_times = normalize(np.array(times))
+        normalized_costs = normalize(np.array(costs))
+
+        # Calculate distances using normalized values and find the minimum distance point
+        distances = np.array(
+            [
+                calculate_distance_to_origin(nc, nt)
+                for nc, nt in zip(normalized_costs, normalized_times)
+            ]
+        )
+        min_distance_idx = np.argmin(distances)
+        optimal_time = times[min_distance_idx]
+        optimal_cost = costs[min_distance_idx]
+        optimal_memory = memories[min_distance_idx]
+
+        # Assign the color for the current chunk size
         color = color_map[chunk_size]
 
         plt.scatter(times, costs, color=color, label=f"{chunk_size} MB Chunk")
-        plt.plot(times, costs, color=color)  # Connect points with the same chunk size
+        plt.plot(times, costs, color=color)  # Connect points of the same chunk size
+        # Highlight the optimal point
+        plt.scatter(
+            [optimal_time], [optimal_cost], color=color, edgecolor="black", marker="D"
+        )
+        plt.text(
+            optimal_time,
+            optimal_cost,
+            f"{optimal_memory} MB (Optimal)",
+            fontsize=9,
+            ha="right",
+            va="bottom",
+        )
 
-        for mem, time, cost in zip(memories, times, costs):
-            plt.text(time, cost, f"{mem} MB", fontsize=9, ha="right", va="bottom")
-
-    all_costs = [
-        cost for values in averaged_profilers.values() for cost in values["costs"]
-    ]
-    all_times = [
-        time for values in averaged_profilers.values() for time in values["times"]
-    ]
-
-    max_cost = max(all_costs)
-    max_time = max(all_times)
-
-    print("Max cost:", max_cost)
-    for cost in values["costs"]:
-        print(cost)
-    min_sum = float("inf")
-    best_config = None
-    for (mem, chunk_size), values in averaged_profilers.items():
-        normalized_costs = [cost / max_cost for cost in values["costs"]]
-        normalized_times = [time / max_time for time in values["times"]]
-
-        for time, cost in zip(normalized_times, normalized_costs):
-            suma = time + cost
-            if suma < min_sum:
-                min_sum = suma
-                best_config = (mem, chunk_size)
-
-    memory, chunk_size = best_config
-    average_time, average_cost = averaged_data[chunk_size][memory]
-    plt.scatter(
-        [average_time],
-        [average_cost],
-        color="black",
-        s=100,
-        edgecolor="yellow",
-        zorder=5,
-    )
     plt.xlabel("Execution Time (seconds)")
     plt.ylabel("Cost")
     plt.legend()
