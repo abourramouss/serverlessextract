@@ -9,6 +9,7 @@ from plot import (
     plot_gantt,
     average_and_plot,
     plot_cost_vs_time_from_collection,
+    plot_cost_vs_time_for_1GB,
 )
 
 parameters = {
@@ -18,7 +19,6 @@ parameters = {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
                 "aoflag.type": "aoflagger",
-                "aoflag.memoryperc": 90,
                 "aoflag.strategy": S3Path(
                     "/ayman-extract/parameters/rebinning/STEP1-NenuFAR64C1S.lua"
                 ),
@@ -149,6 +149,9 @@ plot_cost_vs_time_from_collection(collection, "rebinning")
 
 
 input_data_paths = [
+    "/ayman-extract/partitions/partitions_61zip",
+    "/ayman-extract/partitions/partitions_30zip",
+    "/ayman-extract/partitions/partitions_15zip",
     "/ayman-extract/partitions/partitions_7zip",
     "/ayman-extract/partitions/partitions_3zip",
     "/ayman-extract/partitions/partitions_2zip",
@@ -157,8 +160,8 @@ input_data_paths = [
 file_path = "profilers_data.json"
 
 collection = ProfilerCollection().load_from_file(file_path)
-plot_cost_vs_time_from_collection(collection, "rebinning")
-
+# plot_cost_vs_time_from_collection(collection, "rebinning")
+# [1769, 3538, 5308, 7076, 10240]
 runtime_memories = [1769, 3538, 5308, 7076, 10240]
 MB = 1024 * 1024
 storage = Storage()
@@ -174,6 +177,7 @@ for path in input_data_paths:
         )
         chunk_size = int(chunk_size["content-length"]) // MB
         print("Chunk size:", chunk_size)
+        print("Runtime memory", mem)
         if chunk_size + constant > mem:
             print(
                 f"Skipping run for memory {mem} MB and chunk size {chunk_size} MB (exceeds limit)"
@@ -192,4 +196,20 @@ for path in input_data_paths:
             RebinningStep.__name__, mem, chunk_size, rebinning_profilers
         )
         collection.save_to_file(file_path)
-        plot_cost_vs_time_from_collection(collection, "rebinning")
+        plot_cost_vs_time_from_collection(collection, "rebinning/cost_vs_time")
+        plot_cost_vs_time_for_1GB(collection, "rebinning/cost_vs_time")
+
+        plot_gantt(
+            collection,
+            f"rebinning/gantt/chunk_size{chunk_size}",
+            f"rebinning_gantt_runtime_{mem}.png",
+            mem,
+            chunk_size,
+        )
+        average_and_plot(
+            collection,
+            f"rebinning/runtime_stats/average/chunk_size{chunk_size}",
+            f"rebinning_average_runtime_{mem}_chunksize_{chunk_size}.png",
+            mem,
+            chunk_size,
+        )

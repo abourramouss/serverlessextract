@@ -3,6 +3,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.cm as cm
+import math
 
 
 def aggregate_and_plot(
@@ -305,10 +306,36 @@ def plot_gantt(collection, save_dir, filename, specified_memory, specified_chunk
     print(f"Plot saved to: {save_path}")
 
 
+def normalize(data):
+    """Normalize the data to the range [0, 1]."""
+    min_val = np.min(data)
+    max_val = np.max(data)
+    return (data - min_val) / (max_val - min_val)
+
+
+def calculate_distance_to_origin(cost, time):
+    """Calculate Euclidean distance from the origin."""
+    return np.sqrt(cost**2 + time**2)
+
+
+def find_pareto(costs, times, details):
+    """Identify Pareto optimal points (cost, time) along with their details."""
+    paired_points = list(zip(costs, times, details))
+    pareto_points = []
+    for point in paired_points:
+        if not any(
+            (other[0] <= point[0] and other[1] < point[1]) for other in paired_points
+        ):
+            pareto_points.append(point)
+    pareto_costs, pareto_times, pareto_details = zip(*pareto_points)
+    return list(pareto_costs), list(pareto_times), list(pareto_details)
+
+
 def plot_cost_vs_time_from_collection(collection, save_dir):
     cost_per_ms_per_mb = 0.0000000167
     averaged_profilers = defaultdict(lambda: defaultdict(list))
 
+    # Process the collection data
     for step_profiler in collection:
         for profiler in step_profiler.profilers:
             total_time = sum(timer.duration for timer in profiler.function_timers)
@@ -319,20 +346,14 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
             averaged_profilers[key]["times"].append(total_time)
             averaged_profilers[key]["costs"].append(cost)
 
-            print(
-                f"Processing: Memory={step_profiler.memory}, Chunk Size={step_profiler.chunk_size}, Time={total_time}, Cost={cost}"
-            )
-
+    # Average the data
     averaged_data = defaultdict(dict)
     for (memory, chunk_size), values in averaged_profilers.items():
         average_time = sum(values["times"]) / len(values["times"])
         average_cost = sum(values["costs"]) / len(values["costs"])
         averaged_data[chunk_size][memory] = (average_time, average_cost)
 
-        print(
-            f"Averaged: Memory={memory}, Chunk Size={chunk_size}, Average Time={average_time}, Average Cost={average_cost}"
-        )
-
+    # Setup the plot
     plt.figure(figsize=(15, 10))
     plt.title(
         "Cost vs Execution Time for Various Chunk Sizes and Memory Configurations"
@@ -348,13 +369,38 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
         times, costs, memories = zip(
             *[(time, cost, mem) for mem, (time, cost) in memory_data.items()]
         )
+        normalized_times = normalize(np.array(times))
+        normalized_costs = normalize(np.array(costs))
+
+        # Calculate distances using normalized values and find the minimum distance point
+        distances = np.array(
+            [
+                calculate_distance_to_origin(nc, nt)
+                for nc, nt in zip(normalized_costs, normalized_times)
+            ]
+        )
+        min_distance_idx = np.argmin(distances)
+        optimal_time = times[min_distance_idx]
+        optimal_cost = costs[min_distance_idx]
+        optimal_memory = memories[min_distance_idx]
+
+        # Assign the color for the current chunk size
         color = color_map[chunk_size]
 
         plt.scatter(times, costs, color=color, label=f"{chunk_size} MB Chunk")
-        plt.plot(times, costs, color=color)  # Connect points with the same chunk size
-
-        for mem, time, cost in zip(memories, times, costs):
-            plt.text(time, cost, f"{mem} MB", fontsize=9, ha="right", va="bottom")
+        plt.plot(times, costs, color=color)  # Connect points of the same chunk size
+        # Highlight the optimal point
+        plt.scatter(
+            [optimal_time], [optimal_cost], color=color, edgecolor="black", marker="D"
+        )
+        plt.text(
+            optimal_time,
+            optimal_cost,
+            f"{optimal_memory} MB (Optimal)",
+            fontsize=9,
+            ha="right",
+            va="bottom",
+        )
 
     plt.xlabel("Execution Time (seconds)")
     plt.ylabel("Cost")
@@ -367,3 +413,82 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
     plt.savefig(save_path)
     plt.close()
     print(f"Plot saved to: {save_path}")
+
+
+# TODO: Generalize this function to work with any size
+def plot_cost_vs_time_for_1GB(collection, save_dir):
+    cost_per_ms_per_mb = 0.0000000167
+    averaged_profilers = defaultdict(lambda: defaultdict(list))
+    for step_profiler in collection:
+        for profiler in step_profiler.profilers:
+            total_time = sum(timer.duration for timer in profiler.function_timers)
+            cost = (
+                total_time * 1000 * cost_per_ms_per_mb * (step_profiler.memory / 1024)
+            )
+            key = (step_profiler.memory, step_profiler.chunk_size)
+            averaged_profilers[key]["times"].append(total_time)
+            averaged_profilers[key]["costs"].append(cost)
+
+    costs_for_1GB = []
+    times_for_1GB = []
+    details_for_1GB = []
+    for (memory, chunk_size), values in averaged_profilers.items():
+        average_time = sum(values["times"]) / len(values["times"])
+        average_cost = sum(values["costs"]) / len(values["costs"])
+
+        num_chunks_for_1GB = math.ceil(1024 / chunk_size)  # Assuming 1GB = 1024 MB
+        total_cost_for_1GB = num_chunks_for_1GB * average_cost
+
+        total_time_for_1GB = average_time
+
+        costs_for_1GB.append(total_cost_for_1GB)
+        times_for_1GB.append(total_time_for_1GB)
+        details_for_1GB.append((chunk_size, memory, num_chunks_for_1GB))
+
+    pareto_costs, pareto_times, pareto_details = find_pareto(
+        costs_for_1GB, times_for_1GB, details_for_1GB
+    )
+
+    plt.figure(figsize=(15, 10))
+    plt.title("Pareto Analysis: Cost vs Execution Time for Processing 1GB")
+
+    plt.scatter(times_for_1GB, costs_for_1GB, color="grey", label="All Points")
+
+    plt.scatter(
+        pareto_times,
+        pareto_costs,
+        color="red",
+        edgecolor="black",
+        label="Pareto Optimal Points",
+    )
+
+    for i, (cost, time, detail) in enumerate(
+        zip(pareto_costs, pareto_times, pareto_details)
+    ):
+        chunk_size, memory, num_workers = detail
+        annotation_text = f"{chunk_size} MB\n{memory} MB\n{num_workers} workers"
+
+        offset_index = (i % 3) - 1
+        xytext_offset = (offset_index * 60, 30 + offset_index * 20)
+
+        plt.annotate(
+            annotation_text,
+            xy=(time, cost),
+            xytext=xytext_offset,
+            textcoords="offset points",
+            arrowprops=dict(arrowstyle="->", color="black"),
+            ha="center",
+            fontsize=8,
+        )
+
+    plt.xlabel("Execution Time (seconds)")
+    plt.ylabel("Cost")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    save_path = os.path.join(save_dir, "pareto_analysis_for_1GB.png")
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Pareto plot saved to: {save_path}")
