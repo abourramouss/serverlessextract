@@ -318,6 +318,19 @@ def calculate_distance_to_origin(cost, time):
     return np.sqrt(cost**2 + time**2)
 
 
+def find_pareto(costs, times, details):
+    """Identify Pareto optimal points (cost, time) along with their details."""
+    paired_points = list(zip(costs, times, details))
+    pareto_points = []
+    for point in paired_points:
+        if not any(
+            (other[0] <= point[0] and other[1] < point[1]) for other in paired_points
+        ):
+            pareto_points.append(point)
+    pareto_costs, pareto_times, pareto_details = zip(*pareto_points)
+    return list(pareto_costs), list(pareto_times), list(pareto_details)
+
+
 def plot_cost_vs_time_from_collection(collection, save_dir):
     cost_per_ms_per_mb = 0.0000000167
     averaged_profilers = defaultdict(lambda: defaultdict(list))
@@ -402,19 +415,6 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
     print(f"Plot saved to: {save_path}")
 
 
-def find_pareto(costs, times, details):
-    """Identify Pareto optimal points (cost, time) along with their details."""
-    paired_points = list(zip(costs, times, details))
-    pareto_points = []
-    for point in paired_points:
-        if not any(
-            (other[0] <= point[0] and other[1] < point[1]) for other in paired_points
-        ):
-            pareto_points.append(point)
-    pareto_costs, pareto_times, pareto_details = zip(*pareto_points)
-    return list(pareto_costs), list(pareto_times), list(pareto_details)
-
-
 # TODO: Generalize this function to work with any size
 def plot_cost_vs_time_for_1GB(collection, save_dir):
     cost_per_ms_per_mb = 0.0000000167
@@ -445,7 +445,6 @@ def plot_cost_vs_time_for_1GB(collection, save_dir):
         times_for_1GB.append(total_time_for_1GB)
         details_for_1GB.append((chunk_size, memory, num_chunks_for_1GB))
 
-        # Identify Pareto optimal points and their details
     pareto_costs, pareto_times, pareto_details = find_pareto(
         costs_for_1GB, times_for_1GB, details_for_1GB
     )
