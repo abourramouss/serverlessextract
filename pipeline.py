@@ -9,6 +9,7 @@ from plot import (
     plot_gantt,
     average_and_plot,
     plot_cost_vs_time_from_collection,
+    plot_cost_vs_time_for_1GB,
 )
 
 parameters = {
@@ -196,6 +197,8 @@ for path in input_data_paths:
         )
         collection.save_to_file(file_path)
         plot_cost_vs_time_from_collection(collection, "rebinning/cost_vs_time")
+        plot_cost_vs_time_for_1GB(collection, "rebinning/cost_vs_time")
+
         plot_gantt(
             collection,
             f"rebinning/gantt/chunk_size{chunk_size}",
