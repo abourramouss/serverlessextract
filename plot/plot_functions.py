@@ -415,8 +415,7 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
     print(f"Plot saved to: {save_path}")
 
 
-# TODO: Generalize this function to work with any size
-def plot_cost_vs_time_for_1GB(collection, save_dir):
+def plot_cost_vs_time_pareto(collection, save_dir, dataset_size: int = 1024):
     cost_per_ms_per_mb = 0.0000000167
     averaged_profilers = defaultdict(lambda: defaultdict(list))
     for step_profiler in collection:
@@ -429,30 +428,32 @@ def plot_cost_vs_time_for_1GB(collection, save_dir):
             averaged_profilers[key]["times"].append(total_time)
             averaged_profilers[key]["costs"].append(cost)
 
-    costs_for_1GB = []
-    times_for_1GB = []
+    costs = []
+    times = []
     details_for_1GB = []
     for (memory, chunk_size), values in averaged_profilers.items():
         average_time = sum(values["times"]) / len(values["times"])
         average_cost = sum(values["costs"]) / len(values["costs"])
 
-        num_chunks_for_1GB = math.ceil(1024 / chunk_size)  # Assuming 1GB = 1024 MB
-        total_cost_for_1GB = num_chunks_for_1GB * average_cost
+        num_chunks = math.ceil(dataset_size / chunk_size)  # Assuming 1GB = 1024 MB
+        total_cost = num_chunks * average_cost
 
-        total_time_for_1GB = average_time
+        total_time = average_time
 
-        costs_for_1GB.append(total_cost_for_1GB)
-        times_for_1GB.append(total_time_for_1GB)
-        details_for_1GB.append((chunk_size, memory, num_chunks_for_1GB))
+        costs.append(total_cost)
+        times.append(total_time)
+        details_for_1GB.append((chunk_size, memory, num_chunks))
 
     pareto_costs, pareto_times, pareto_details = find_pareto(
-        costs_for_1GB, times_for_1GB, details_for_1GB
+        costs, times, details_for_1GB
     )
 
     plt.figure(figsize=(15, 10))
-    plt.title("Pareto Analysis: Cost vs Execution Time for Processing 1GB")
+    plt.title(
+        f"Pareto Analysis: Cost vs Execution Time for Processing {dataset_size} MB"
+    )
 
-    plt.scatter(times_for_1GB, costs_for_1GB, color="grey", label="All Points")
+    plt.scatter(times, costs, color="grey", label="All Points")
 
     plt.scatter(
         pareto_times,
@@ -487,7 +488,7 @@ def plot_cost_vs_time_for_1GB(collection, save_dir):
     plt.grid(True)
     plt.tight_layout()
 
-    save_path = os.path.join(save_dir, "pareto_analysis_for_1GB.png")
+    save_path = os.path.join(save_dir, f"pareto_analysis_for_{dataset_size}MB.png")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(save_path)
     plt.close()
