@@ -9,7 +9,8 @@ from plot import (
     plot_gantt,
     average_and_plot,
     plot_cost_vs_time_from_collection,
-    plot_cost_vs_time_pareto,
+    plot_cost_vs_time_pareto_simulated,
+    plot_cost_vs_time_pareto_real,
 )
 
 parameters = {
@@ -148,6 +149,7 @@ plot_cost_vs_time_from_collection(collection, "rebinning")
 """
 
 
+"""
 input_data_paths = [
     "/ayman-extract/partitions/partitions_61zip",
     "/ayman-extract/partitions/partitions_30zip",
@@ -155,6 +157,14 @@ input_data_paths = [
     "/ayman-extract/partitions/partitions_7zip",
     "/ayman-extract/partitions/partitions_3zip",
     "/ayman-extract/partitions/partitions_2zip",
+]
+"""
+
+input_data_paths = [
+    "/ayman-extract/partitions/partitions9_1100MB_zip/",
+    "/ayman-extract/partitions/partitions4_1100MB_zip/",
+    "/ayman-extract/partitions/partitions2_1100MB_zip/",
+    "/ayman-extract/partitions/partitions1_1100MB_zip/",
 ]
 
 file_path = "profilers_data.json"
@@ -190,14 +200,17 @@ for path in input_data_paths:
             input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
             parameters=parameters["RebinningStep"]["parameters"],
             output=parameters["RebinningStep"]["output"],
-        ).run(func_limit=1, runtime_memory=mem)
+        ).run(runtime_memory=mem)
 
         collection.add_step_profiler(
             RebinningStep.__name__, mem, chunk_size, rebinning_profilers
         )
         collection.save_to_file(file_path)
         plot_cost_vs_time_from_collection(collection, "rebinning/cost_vs_time")
-
+        plot_cost_vs_time_pareto_simulated(
+            collection, "rebinning/cost_vs_time_pareto_simulated"
+        )
+        plot_cost_vs_time_pareto_real(collection, "rebinning/cost_vs_time_pareto_real")
         plot_gantt(
             collection,
             f"rebinning/gantt/chunk_size{chunk_size}",

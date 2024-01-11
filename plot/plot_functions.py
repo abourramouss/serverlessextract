@@ -415,9 +415,11 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
     print(f"Plot saved to: {save_path}")
 
 
-def plot_cost_vs_time_pareto(collection, save_dir, dataset_size: int = 1024):
+def plot_cost_vs_time_pareto_simulated(collection, save_dir, dataset_size: int = 110):
     cost_per_ms_per_mb = 0.0000000167
     averaged_profilers = defaultdict(lambda: defaultdict(list))
+
+    # Process the collection data
     for step_profiler in collection:
         for profiler in step_profiler.profilers:
             total_time = sum(timer.duration for timer in profiler.function_timers)
@@ -430,22 +432,98 @@ def plot_cost_vs_time_pareto(collection, save_dir, dataset_size: int = 1024):
 
     costs = []
     times = []
-    details_for_1GB = []
+    details_for_dataset = []
     for (memory, chunk_size), values in averaged_profilers.items():
         average_time = sum(values["times"]) / len(values["times"])
-        average_cost = sum(values["costs"]) / len(values["costs"])
+        num_chunks = math.ceil(dataset_size / chunk_size)
 
-        num_chunks = math.ceil(dataset_size / chunk_size)  # Assuming 1GB = 1024 MB
-        total_cost = num_chunks * average_cost
-
-        total_time = average_time
+        # Calculate total cost based on average duration and number of chunks
+        total_cost = (
+            average_time * num_chunks * 1000 * cost_per_ms_per_mb * (memory / 1024)
+        )
 
         costs.append(total_cost)
-        times.append(total_time)
-        details_for_1GB.append((chunk_size, memory, num_chunks))
+        times.append(average_time)
+        details_for_dataset.append((chunk_size, memory, num_chunks))
 
     pareto_costs, pareto_times, pareto_details = find_pareto(
-        costs, times, details_for_1GB
+        costs, times, details_for_dataset
+    )
+
+    plt.figure(figsize=(15, 10))
+    plt.title(
+        f"Pareto Analysis: Cost vs Execution Time for Processing {dataset_size} MB"
+    )
+
+    plt.scatter(times, costs, color="grey", label="All Points")
+    plt.scatter(
+        pareto_times,
+        pareto_costs,
+        color="red",
+        edgecolor="black",
+        label="Pareto Optimal Points",
+    )
+    for i, (cost, time, detail) in enumerate(
+        zip(pareto_costs, pareto_times, pareto_details)
+    ):
+        chunk_size, memory, num_workers = detail
+        annotation_text = f"{chunk_size} MB\n{memory} MB\n{num_workers} workers"
+
+        offset_index = (i % 3) - 1
+        xytext_offset = (offset_index * 60, 30 + offset_index * 20)
+
+        plt.annotate(
+            annotation_text,
+            xy=(time, cost),
+            xytext=xytext_offset,
+            textcoords="offset points",
+            arrowprops=dict(arrowstyle="->", color="black"),
+            ha="center",
+            fontsize=8,
+        )
+
+    plt.xlabel("Execution Time (seconds)")
+    plt.ylabel("Cost")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+    save_path = os.path.join(save_dir, f"pareto_analysis_for_{dataset_size}MB.png")
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Pareto plot saved to: {save_path}")
+
+
+def plot_cost_vs_time_pareto_real(collection, save_dir, dataset_size: int = 1100):
+    cost_per_ms_per_mb = 0.0000000167
+
+    config_totals = defaultdict(lambda: {"total_time": 0, "total_cost": 0})
+
+    for step_profiler in collection:
+        for profiler in step_profiler:
+            profiler_time = max(timer.duration for timer in profiler.function_timers)
+            profiler_cost = (
+                profiler_time
+                * 1000
+                * cost_per_ms_per_mb
+                * (step_profiler.memory / 1024)
+            )
+
+            config_key = (step_profiler.memory, step_profiler.chunk_size)
+            config_totals[config_key]["total_time"] = max(
+                config_totals[config_key]["total_time"], profiler_time
+            )
+            config_totals[config_key]["total_cost"] += profiler_cost
+
+    times = [config["total_time"] for config in config_totals.values()]
+    costs = [config["total_cost"] for config in config_totals.values()]
+    details_for_dataset = [
+        (key[1], key[0], math.ceil(dataset_size / key[1]))
+        for key in config_totals.keys()
+    ]
+    pareto_costs, pareto_times, pareto_details = find_pareto(
+        costs, times, details_for_dataset
     )
 
     plt.figure(figsize=(15, 10))
