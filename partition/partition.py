@@ -75,7 +75,7 @@ class Partitioner:
                     start_index = i
                     partition_counter += 1
 
-                    break  # Break after the first partition is created
+                    # break  # Break after the first partition is created
 
                 if i % 100000 == 0:
                     print(f"Processed {i} rows")
@@ -86,7 +86,7 @@ class Partitioner:
 
 
 if __name__ == "__main__":
-    partitions = [61, 30, 15, 7, 3, 2]
+    partitions = [7.78]
     for pr in partitions:
         p = Partitioner("/home/ayman/Downloads/SB205.MS")
         total_partitions = p.partition_chunks(pr)
