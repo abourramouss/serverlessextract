@@ -1,9 +1,9 @@
 from casacore.tables import table
 import os
 import numpy as np
-from upload import upload_directory_to_s3
 import shutil
 import zipfile
+from upload import upload_directory_to_s3
 
 
 def remove(path):
@@ -34,86 +34,59 @@ class Partitioner:
     def __init__(self, *input_files):
         self.input_files = input_files
 
-    def partition_chunks(self, num_chunks):
+    def partition_into_n(self, n):
         os.makedirs("partitions", exist_ok=True)
-        partition_counter = 1
         for input_file in self.input_files:
             t = table(input_file, readonly=False)
-            t = t.sort("TIME")  # Sort the table based on the time column
             num_rows = len(t)
-            original_times = np.array(t.getcol("TIME"))
+            rows_per_partition = num_rows // n
 
-            total_duration = original_times[-1] - original_times[0]
-            chunk_duration = total_duration / num_chunks
-
-            start_time = original_times[0]
-            end_time = start_time + chunk_duration
             start_index = 0
+            for i in range(1, n + 1):
+                end_index = min(start_index + rows_per_partition, num_rows)
+                if i == n:  # For the last partition, include all remaining rows
+                    end_index = num_rows
 
-            for i in range(num_rows):
-                current_time = original_times[i]
-                if current_time >= end_time:
-                    partition = t.selectrows(np.arange(start_index, i))
-                    partition_times = np.array(partition.getcol("TIME"))
-
-                    is_exact_subset = np.array_equal(
-                        np.sort(partition_times), np.sort(original_times[start_index:i])
-                    )
-                    print(
-                        f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}"
-                    )
-                    print(
-                        f"Partitioning rows {start_index} to {i} into {partition.nrows()} rows"
-                    )
-
-                    partition_name = f"partitions/partition_{partition_counter}.ms"
-                    partition.copy(partition_name, deep=True)
-                    partition.close()
-
-                    start_time = current_time
-                    end_time = start_time + chunk_duration
-                    start_index = i
-                    partition_counter += 1
-
-                    # break  # Break after the first partition is created
-
-                if i % 100000 == 0:
-                    print(f"Processed {i} rows")
+                partition_name = f"partitions/partition_{i}.ms"
+                t.selectrows(np.arange(start_index, end_index)).copy(
+                    partition_name, deep=True
+                )
+                print(f"Partition {i} created with rows {start_index} to {end_index}")
+                start_index = end_index
 
             t.close()
 
-        return partition_counter - 1
+        return n
 
 
 if __name__ == "__main__":
-    partitions = [7.78]
-    for pr in partitions:
-        p = Partitioner("/home/ayman/Downloads/SB205.MS")
-        total_partitions = p.partition_chunks(pr)
-        print(f"Total partitions created: {total_partitions+1}")
-        # List the partition directories after partitioning is complete
-        dir_partitions = os.listdir("partitions")
-        # Zip each partition directory
-        for partition in dir_partitions:
-            partition_dir = f"partitions/{partition}"
-            if os.path.isdir(partition_dir):  # Make sure it's a directory
-                zip_directory_without_compression(
-                    partition_dir, f"{partition_dir}.zip", partition
-                )
+    num_partitions = 1
+    p = Partitioner("/home/ayman/Work/partition_1.ms")
+    p.partition_into_n(num_partitions)
+    print(f"Total partitions created: {num_partitions}")
 
-        # Now that each partition is zipped, you can remove the directories
-        for partition in dir_partitions:
-            partition_dir = f"partitions/{partition}"
-            remove(partition_dir)
+    dir_partitions = os.listdir("partitions")
+    # Zip each partition directory
+    for partition in dir_partitions:
+        partition_dir = f"partitions/{partition}"
+        if os.path.isdir(partition_dir):
+            zip_directory_without_compression(
+                partition_dir, f"{partition_dir}.zip", partition
+            )
 
-        # Finally, upload to S3
-        upload_directory_to_s3(
-            "partitions",
-            "ayman-extract",
-            f"partitions/partitions_{pr}zip",
-        )
+    # Now that each partition is zipped, remove the directories
+    for partition in dir_partitions:
+        partition_dir = f"partitions/{partition}"
+        remove(partition_dir)
 
-        # Remove the zip files
-        for partition in dir_partitions:
-            partition_dir = f"partitions/{partition}.zip"
-            remove(partition_dir)
+    # Finally, upload to S3
+    upload_directory_to_s3(
+        "partitions",
+        "ayman-extract",
+        f"partitions/partitions{num_partitions}_1100MB_zip",
+    )
+
+    # Remove the zip files
+    for partition in dir_partitions:
+        partition_dir = f"partitions/{partition}.zip"
+        remove(partition_dir)
