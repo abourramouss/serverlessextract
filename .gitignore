@@ -6,3 +6,4 @@ extract/
 .vscode/settings.json
 *.png
 profilers_data.json
+profilers_data_simulation.json
