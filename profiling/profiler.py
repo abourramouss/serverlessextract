@@ -301,6 +301,9 @@ class MetricCollector:
 
 class Profiler:
     def __init__(self):
+        self.worker_id = None
+        self.worker_start_tstamp = None
+        self.worker_end_tstamp = None
         self.metrics = MetricCollector()
         self.function_timers = []
 
@@ -326,6 +329,15 @@ class Profiler:
             profiler.function_timers = [
                 FunctionTimer.from_dict(timer) for timer in data["function_timers"]
             ]
+
+        if "worker_id" in data:
+            profiler.worker_id = data["worker_id"]
+
+        if "worker_start_tstamp" in data:
+            profiler.worker_start_tstamp = data["worker_start_tstamp"]
+
+        if "worker_end_tstamp" in data:
+            profiler.worker_end_tstamp = data["worker_end_tstamp"]
 
         return profiler
 
@@ -358,6 +370,9 @@ class Profiler:
 
     def to_dict(self):
         return {
+            "worker_id": self.worker_id,
+            "worker_start_tstamp": self.worker_start_tstamp,
+            "worker_end_tstamp": self.worker_end_tstamp,
             "metrics": self.metrics.to_dict(),
             "function_timers": [timer.to_dict() for timer in self.function_timers],
         }
