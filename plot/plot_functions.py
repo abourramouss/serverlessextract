@@ -518,7 +518,13 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
                 )
 
             data_for_plot.append(
-                (total_duration, acc_cost, runtime_mem, chunk_size, len(job.profilers))
+                (
+                    job.client_duration,
+                    acc_cost,
+                    runtime_mem,
+                    chunk_size,
+                    len(job.profilers),
+                )
             )
 
     plt.figure(figsize=(15, 10))

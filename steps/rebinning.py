@@ -76,10 +76,14 @@ class RebinningStep(PipelineStep):
             f"aoflag.strategy={aoflag_path}",
         ]
 
+        # TODO: mirar si popen afecta al tiempo de ejecucion
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
         # Profile the process execution
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
+
+        print(stdout)
+        print(stderr)
         posix_source = time_it("zip", data_source.zip, time_records, PosixPath(msout))
         # Profile the upload_directory method
         time_it(

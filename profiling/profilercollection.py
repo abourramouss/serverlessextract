@@ -21,12 +21,16 @@ class Job:
         chunk_size: int,
         memory: int,
         number_workers: int,
+        start_time: float,
+        end_time: float,
         profilers: List[Profiler],
     ):
         self.job_id = str(uuid.uuid4())
         self.chunk_size = chunk_size
         self.memory = memory
         self.number_workers = number_workers
+        self.start_time = (start_time,)
+        self.end_time = (end_time,)
         self.profilers = profilers
 
     def to_dict(self):
@@ -35,22 +39,37 @@ class Job:
             "chunk_size": self.chunk_size,
             "memory": self.memory,
             "number_workers": self.number_workers,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
             "profilers": [profiler.to_dict() for profiler in self.profilers],
         }
 
     @classmethod
     def from_dict(cls, data):
         profilers = [Profiler.from_dict(p) for p in data["profilers"]]
-        return cls(data["chunk_size"], data["memory"], profilers)
+        return cls(
+            data["chunk_size"],
+            data["memory"],
+            data["start_time"],
+            data["end_time"],
+            profilers,
+        )
 
 
 class Step:
     def __init__(self, step_name: str):
         self.step_name = step_name
-        self.jobs = []  # List of Job instances
+        self.jobs = []
 
-    def add_job(self, chunk_size: int, memory: int, profilers: List[Profiler]):
-        job = Job(chunk_size, memory, len(profilers), profilers)
+    def add_job(
+        self,
+        chunk_size: int,
+        memory: int,
+        start_time: float,
+        end_time: float,
+        profilers: List[Profiler],
+    ):
+        job = Job(chunk_size, memory, len(profilers), start_time, end_time, profilers)
         self.jobs.append(job)
 
     def to_dict(self):
@@ -66,6 +85,8 @@ class Step:
             step.add_job(
                 job_data["chunk_size"],
                 job_data["memory"],
+                job_data["start_time"],
+                job_data["end_time"],
                 [Profiler.from_dict(p) for p in job_data["profilers"]],
             )
         return step
@@ -90,10 +111,14 @@ class JobCollection:
             if job.memory == memory and job.chunk_size == chunk_size
         ]
 
-    def add_step_profiler(self, step_name, memory, chunk_size, profilers):
+    def add_step_profiler(
+        self, step_name, memory, chunk_size, start_time, end_time, profilers
+    ):
         if step_name not in self.steps:
             self.steps[step_name] = Step(step_name)
-        self.steps[step_name].add_job(chunk_size, memory, profilers)
+        self.steps[step_name].add_job(
+            chunk_size, memory, start_time, end_time, profilers
+        )
 
     def to_dict(self):
         return {step_name: step.to_dict() for step_name, step in self.steps.items()}
