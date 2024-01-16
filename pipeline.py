@@ -108,15 +108,17 @@ parameters = {
 
 
 input_data_paths = [
-    "/ayman-extract/partitions/partitions9_1100MB_zip/",
-    "/ayman-extract/partitions/partitions4_1100MB_zip/",
-    "/ayman-extract/partitions/partitions2_1100MB_zip/",
-    "/ayman-extract/partitions/partitions1_1100MB_zip/",
+    "/ayman-extract/partitions/partitions_1100MB_9zip//",
+    "/ayman-extract/partitions/partitions_1100MB_4zip//",
+    "/ayman-extract/partitions/partitions_1100MB_2zip//",
+    "/ayman-extract/partitions/partitions_1100MB_1zip//",
 ]
 
 file_path = "profilers_data.json"
 
 collection = JobCollection().load_from_file(file_path)
+
+
 # plot_cost_vs_time_from_collection(collection, "rebinning")
 # [1769, 3538, 5308, 7076, 10240]
 runtime_memories = [1769, 3538, 5308, 7076, 10240]
@@ -124,6 +126,7 @@ storage = Storage()
 file_path = "profilers_data.json"
 constant = 700
 
+"""
 
 for path in input_data_paths:
     for mem in runtime_memories:
@@ -150,7 +153,7 @@ for path in input_data_paths:
             output=parameters["RebinningStep"]["output"],
         ).run(runtime_memory=mem)
         end_time = time.time()
-        print(f"Rebinning took {end_time} seconds")
+        print(f"Rebinning took {end_time-start_time} seconds")
         collection.add_step_profiler(
             RebinningStep.__name__,
             mem,
@@ -176,3 +179,10 @@ for path in input_data_paths:
             mem,
             chunk_size,
         )
+
+
+"""
+
+plot_cost_vs_time_pareto_real(
+    collection, "rebinning/cost_vs_time_pareto_real", "RebinningStep", 1091
+)
