@@ -344,10 +344,12 @@ def plot_cost_vs_time_from_collection(job_collection, save_dir):
     # Process the collection data
     for step_name, job in job_collection:
         for profiler in job.profilers:
-            total_time = sum(timer.duration for timer in profiler.function_timers)
-            cost = total_time * 1000 * cost_per_ms_per_mb * (job.memory / 1024)
+            total_time_worker = (
+                profiler.worker_end_tstamp - profiler.worker_start_tstamp
+            )
+            cost = total_time_worker * 1000 * cost_per_ms_per_mb * (job.memory / 1024)
             key = (job.memory, job.chunk_size)
-            averaged_profilers[key]["times"].append(total_time)
+            averaged_profilers[key]["times"].append(total_time_worker)
             averaged_profilers[key]["costs"].append(cost)
 
     # Average the data
@@ -501,25 +503,23 @@ def plot_cost_vs_time_pareto_simulated(collection, save_dir, dataset_size: int =
 
 def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_size):
     cost_per_ms_per_mb = 0.0000000167
-    data_for_plot = []
+    data_for_plot = defaultdict(list)
 
     for step, job in job_collection:
         if step == step_name:
             runtime_mem, chunk_size = job.memory, job.chunk_size
             acc_cost = 0
-            total_duration = 0
             for worker in job.profilers:
-                worker_duration = sum(
-                    timer.duration for timer in worker.function_timers
-                )
-                total_duration += worker_duration
                 acc_cost += (
-                    worker_duration * 1000 * cost_per_ms_per_mb * (runtime_mem / 1024)
+                    (worker.worker_end_tstamp - worker.worker_start_tstamp)
+                    * 1000
+                    * cost_per_ms_per_mb
+                    * (runtime_mem / 1024)
                 )
 
-            data_for_plot.append(
+            data_for_plot[chunk_size].append(
                 (
-                    job.client_duration,
+                    job.end_time - job.start_time,
                     acc_cost,
                     runtime_mem,
                     chunk_size,
@@ -528,36 +528,54 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
             )
 
     plt.figure(figsize=(15, 10))
-    times, costs, memories, chunk_sizes, num_workers = zip(*data_for_plot)
+    colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
 
-    pareto_front = is_pareto_efficient(np.vstack((times, costs)).T)
-    normal_points = np.invert(pareto_front)
+    for i, (chunk_size, data) in enumerate(data_for_plot.items()):
+        times, costs, memories, num_workers = zip(
+            *[(d[0], d[1], d[2], d[4]) for d in data]
+        )
+        plt.scatter(times, costs, color=colors[i], alpha=0.5)
+        plt.plot(times, costs, color=colors[i], alpha=0.5)
 
+    all_times, all_costs = zip(
+        *[(d[0], d[1]) for data in data_for_plot.values() for d in data]
+    )
+    pareto_front = is_pareto_efficient(np.vstack((all_times, all_costs)).T)
     plt.scatter(
-        np.array(times)[pareto_front],
-        np.array(costs)[pareto_front],
+        np.array(all_times)[pareto_front],
+        np.array(all_costs)[pareto_front],
         color="red",
-        label="Pareto Frontier",
-    )
-    plt.scatter(
-        np.array(times)[normal_points],
-        np.array(costs)[normal_points],
-        color="gray",
-        label="Other Points",
     )
 
-    for i, (time, cost, mem, chunk, workers) in enumerate(
-        zip(times, costs, memories, chunk_sizes, num_workers)
-    ):
+    annotations = []
+    for chunk_size, data in data_for_plot.items():
+        for time, cost, mem, workers in [(d[0], d[1], d[2], d[4]) for d in data]:
+            annotation_text = f"{mem} MB, {cost:.4f}, {workers} workers, {time:.2f}s"
+            annotations.append((time, cost, annotation_text))
+
+    def check_overlap(annotation, other_annotations):
+        for other in other_annotations:
+            if (abs(annotation[0] - other[0]) < 0.05) and (
+                abs(annotation[1] - other[1]) < 0.05
+            ):
+                return True
+        return False
+
+    for time, cost, annotation_text in annotations:
+        xytext = (20, 20)
+        while check_overlap((time + xytext[0], cost + xytext[1]), annotations):
+            xytext = (xytext[0] + 10, xytext[1] + 10)
+
         plt.annotate(
-            f"{mem} MB, {cost:.4f}, {chunk} MB, {workers} workers, {time:.2f}s",
-            (time, cost),
+            annotation_text,
+            xy=(time, cost),
+            xytext=xytext,
             textcoords="offset points",
-            xytext=(
-                0,
-                10 if i % 2 == 0 else -20,
+            ha="right",
+            va="bottom",
+            arrowprops=dict(
+                arrowstyle="->", connectionstyle="arc3,rad=.2", color="black"
             ),
-            ha="center",
             fontsize=6,
         )
 
@@ -566,10 +584,24 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
     )
     plt.xlabel("Execution Time (seconds)")
     plt.ylabel("Cost")
-    plt.legend()
+    plt.legend(
+        [plt.Line2D([0], [0], color=c, lw=4) for c in colors]
+        + [
+            plt.Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                label="Pareto Frontier",
+                markersize=10,
+                markerfacecolor="red",
+            )
+        ],
+        [f"Chunk Size: {cs} MB" for cs in data_for_plot.keys()] + ["Pareto Frontier"],
+    )
+
     plt.grid(True)
     plt.tight_layout()
-
     save_path = os.path.join(save_dir, f"pareto_analysis_{step_name}.png")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(save_path)

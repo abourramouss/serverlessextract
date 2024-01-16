@@ -29,8 +29,8 @@ class Job:
         self.chunk_size = chunk_size
         self.memory = memory
         self.number_workers = number_workers
-        self.start_time = (start_time,)
-        self.end_time = (end_time,)
+        self.start_time = start_time
+        self.end_time = end_time
         self.profilers = profilers
 
     def to_dict(self):
