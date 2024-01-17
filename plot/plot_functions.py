@@ -237,6 +237,7 @@ def average_and_plot(
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(os.path.join(save_dir, filename))
     plt.close()
+    print(f"Plot saved to: {os.path.join(save_dir, filename)}")
 
 
 def plot_gantt(
@@ -504,6 +505,7 @@ def plot_cost_vs_time_pareto_simulated(collection, save_dir, dataset_size: int =
 def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_size):
     cost_per_ms_per_mb = 0.0000000167
     data_for_plot = defaultdict(list)
+    average_data = defaultdict(lambda: defaultdict(list))
 
     for step, job in job_collection:
         if step == step_name:
@@ -516,16 +518,14 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
                     * cost_per_ms_per_mb
                     * (runtime_mem / 1024)
                 )
+            job_key = (chunk_size, runtime_mem, len(job.profilers))
+            average_data[job_key]["times"].append(job.end_time - job.start_time)
+            average_data[job_key]["costs"].append(acc_cost)
 
-            data_for_plot[chunk_size].append(
-                (
-                    job.end_time - job.start_time,
-                    acc_cost,
-                    runtime_mem,
-                    chunk_size,
-                    len(job.profilers),
-                )
-            )
+    for key, values in average_data.items():
+        avg_time = np.mean(values["times"])
+        avg_cost = np.mean(values["costs"])
+        data_for_plot[key[0]].append((avg_time, avg_cost, key[1], key[0], key[2]))
 
     plt.figure(figsize=(15, 10))
     colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
@@ -599,7 +599,6 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
         ],
         [f"Chunk Size: {cs} MB" for cs in data_for_plot.keys()] + ["Pareto Frontier"],
     )
-
     plt.grid(True)
     plt.tight_layout()
     save_path = os.path.join(save_dir, f"pareto_analysis_{step_name}.png")
