@@ -30,6 +30,7 @@ def zip_directory_without_compression(source_dir_path, output_zip_path, partitio
                 zipf.write(file_path, arcname=arcname)
 
 
+# Class that takes a measurement set and partitions it into chunks, then uploads them to s3
 class Partitioner:
     def __init__(self, *input_files):
         self.input_files = input_files
@@ -43,8 +44,10 @@ class Partitioner:
             num_rows = len(t)
             original_times = np.array(t.getcol("TIME"))
 
-            total_duration = original_times[-1] - original_times[0]
-            chunk_duration = total_duration / num_chunks
+            total_duration = (
+                original_times[-1] - original_times[0]
+            )  # Calculate total duration
+            chunk_duration = total_duration / num_chunks  # Calculate chunk duration
 
             start_time = original_times[0]
             end_time = start_time + chunk_duration
@@ -56,29 +59,49 @@ class Partitioner:
                     partition = t.selectrows(np.arange(start_index, i))
                     partition_times = np.array(partition.getcol("TIME"))
 
+                    # Check for an exact match in the elements and size between the partition and the slice from the original array
                     is_exact_subset = np.array_equal(
                         np.sort(partition_times), np.sort(original_times[start_index:i])
                     )
                     print(
                         f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}"
                     )
+
                     print(
                         f"Partitioning rows {start_index} to {i} into {partition.nrows()} rows"
                     )
-
                     partition_name = f"partitions/partition_{partition_counter}.ms"
                     partition.copy(partition_name, deep=True)
+
                     partition.close()
 
                     start_time = current_time
                     end_time = start_time + chunk_duration
-                    start_index = i
+                    start_index = i  # Start next partition at current row
                     partition_counter += 1
 
-                    break  # Break after the first partition is created
-
-                if i % 100000 == 0:
+                if i % 100000 == 0:  # Print a progress update every 100,000 rows
                     print(f"Processed {i} rows")
+
+            if start_index < num_rows:
+                partition = t.selectrows(np.arange(start_index, num_rows))
+                partition_times = np.array(partition.getcol("TIME"))
+
+                # Check for an exact match in the elements and size between the partition and the slice from the original array
+                is_exact_subset = np.array_equal(
+                    np.sort(partition_times), np.sort(original_times[start_index:])
+                )
+                print(
+                    f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}"
+                )
+
+                print(
+                    f"Partitioning rows {start_index} to {num_rows} into {partition.nrows()} rows"
+                )
+                partition_name = f"partitions/partition_{partition_counter}.ms"
+                partition.copy(partition_name, deep=True)
+
+                partition.close()
 
             t.close()
 
@@ -86,9 +109,9 @@ class Partitioner:
 
 
 if __name__ == "__main__":
-    partitions = [61, 30, 15, 7, 3, 2]
+    partitions = [9, 4, 2, 1]
     for pr in partitions:
-        p = Partitioner("/home/ayman/Downloads/SB205.MS")
+        p = Partitioner("/home/ayman/Desktop/partition_1.ms")
         total_partitions = p.partition_chunks(pr)
         print(f"Total partitions created: {total_partitions+1}")
         # List the partition directories after partitioning is complete
@@ -110,7 +133,7 @@ if __name__ == "__main__":
         upload_directory_to_s3(
             "partitions",
             "ayman-extract",
-            f"partitions/partitions_{pr}zip",
+            f"partitions/partitions_1100MB_{pr}zip",
         )
 
         # Remove the zip files

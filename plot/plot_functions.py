@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.cm as cm
 import math
+from profiling import JobCollection
 
 
 def aggregate_and_plot(
@@ -128,20 +129,19 @@ def aggregate_and_plot(
 
 
 def average_and_plot(
-    collection, save_dir, filename, specified_memory, specified_chunk_size
+    job_collection, save_dir, filename, specified_memory, specified_chunk_size
 ):
     aggregated_metrics = {}
     timestamps = {}
     profiler_count = 0
 
-    for step_profiler in collection:
-        if (
-            step_profiler.memory == specified_memory
-            and step_profiler.chunk_size == specified_chunk_size
-        ):
-            profiler_count += len(step_profiler)
-            for profiler in step_profiler:
-                for metric in profiler:
+    for step_name, job in job_collection:
+        if job.memory == specified_memory and job.chunk_size == specified_chunk_size:
+            for profiler in job.profilers:
+                profiler_count += 1
+                for (
+                    metric
+                ) in profiler.metrics:  # Assuming profiler has a 'metrics' attribute
                     cid = metric.collection_id
                     if cid not in aggregated_metrics:
                         aggregated_metrics[cid] = {
@@ -237,20 +237,19 @@ def average_and_plot(
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(os.path.join(save_dir, filename))
     plt.close()
+    print(f"Plot saved to: {os.path.join(save_dir, filename)}")
 
 
-def plot_gantt(collection, save_dir, filename, specified_memory, specified_chunk_size):
-    # Data structure for aggregated and averaged timer data
+def plot_gantt(
+    job_collection, save_dir, filename, specified_memory, specified_chunk_size
+):
     timer_data = defaultdict(
         lambda: {"total_start": 0, "total_duration": 0, "count": 0}
     )
 
-    for step_profiler in collection:
-        if (
-            step_profiler.memory == specified_memory
-            and step_profiler.chunk_size == specified_chunk_size
-        ):
-            for profiler in step_profiler.profilers:
+    for step_name, job in job_collection:
+        if job.memory == specified_memory and job.chunk_size == specified_chunk_size:
+            for profiler in job.profilers:
                 for timer in profiler.function_timers:
                     data = timer_data[timer.label]
                     data["total_start"] += timer.start_time
@@ -278,13 +277,11 @@ def plot_gantt(collection, save_dir, filename, specified_memory, specified_chunk
     for idx, (label, data) in enumerate(timer_data.items()):
         color_idx = idx % len(colors)
         relative_start_time = data["avg_start"] - min_start_time
-        bar = ax.broken_barh(
+        ax.broken_barh(
             [(relative_start_time, data["avg_duration"])],
             (idx - 0.4, 0.8),
             facecolors=colors[color_idx],
         )
-
-        # Annotate each bar with the average time
         text_x = relative_start_time + data["avg_duration"] / 2
         text_y = idx
         ax.text(
@@ -303,6 +300,7 @@ def plot_gantt(collection, save_dir, filename, specified_memory, specified_chunk
     save_path = os.path.join(save_dir, filename)
     plt.tight_layout()
     plt.savefig(save_path, bbox_inches="tight")
+    plt.close()
     print(f"Plot saved to: {save_path}")
 
 
@@ -318,6 +316,15 @@ def calculate_distance_to_origin(cost, time):
     return np.sqrt(cost**2 + time**2)
 
 
+def is_pareto_efficient(costs):
+    is_efficient = np.ones(costs.shape[0], dtype=bool)
+    for i, c in enumerate(costs):
+        if is_efficient[i]:
+            is_efficient[is_efficient] = np.any(costs[is_efficient] < c, axis=1)
+            is_efficient[i] = True
+    return is_efficient
+
+
 def find_pareto(costs, times, details):
     """Identify Pareto optimal points (cost, time) along with their details."""
     paired_points = list(zip(costs, times, details))
@@ -331,19 +338,19 @@ def find_pareto(costs, times, details):
     return list(pareto_costs), list(pareto_times), list(pareto_details)
 
 
-def plot_cost_vs_time_from_collection(collection, save_dir):
+def plot_cost_vs_time_from_collection(job_collection, save_dir):
     cost_per_ms_per_mb = 0.0000000167
     averaged_profilers = defaultdict(lambda: defaultdict(list))
 
     # Process the collection data
-    for step_profiler in collection:
-        for profiler in step_profiler.profilers:
-            total_time = sum(timer.duration for timer in profiler.function_timers)
-            cost = (
-                total_time * 1000 * cost_per_ms_per_mb * (step_profiler.memory / 1024)
+    for step_name, job in job_collection:
+        for profiler in job.profilers:
+            total_time_worker = (
+                profiler.worker_end_tstamp - profiler.worker_start_tstamp
             )
-            key = (step_profiler.memory, step_profiler.chunk_size)
-            averaged_profilers[key]["times"].append(total_time)
+            cost = total_time_worker * 1000 * cost_per_ms_per_mb * (job.memory / 1024)
+            key = (job.memory, job.chunk_size)
+            averaged_profilers[key]["times"].append(total_time_worker)
             averaged_profilers[key]["costs"].append(cost)
 
     # Average the data
@@ -408,17 +415,18 @@ def plot_cost_vs_time_from_collection(collection, save_dir):
     plt.grid(True)
     plt.tight_layout()
 
-    save_path = os.path.join(save_dir, "averaged_cost_vs_time_profiler_collection.png")
+    save_path = os.path.join(save_dir, "averaged_cost_vs_time_job_collection.png")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(save_path)
     plt.close()
     print(f"Plot saved to: {save_path}")
 
 
-# TODO: Generalize this function to work with any size
-def plot_cost_vs_time_for_1GB(collection, save_dir):
+def plot_cost_vs_time_pareto_simulated(collection, save_dir, dataset_size: int = 1100):
     cost_per_ms_per_mb = 0.0000000167
     averaged_profilers = defaultdict(lambda: defaultdict(list))
+
+    # Process the collection data
     for step_profiler in collection:
         for profiler in step_profiler.profilers:
             total_time = sum(timer.duration for timer in profiler.function_timers)
@@ -429,31 +437,32 @@ def plot_cost_vs_time_for_1GB(collection, save_dir):
             averaged_profilers[key]["times"].append(total_time)
             averaged_profilers[key]["costs"].append(cost)
 
-    costs_for_1GB = []
-    times_for_1GB = []
-    details_for_1GB = []
+    costs = []
+    times = []
+    details_for_dataset = []
     for (memory, chunk_size), values in averaged_profilers.items():
         average_time = sum(values["times"]) / len(values["times"])
-        average_cost = sum(values["costs"]) / len(values["costs"])
+        num_chunks = math.ceil(dataset_size / chunk_size)
 
-        num_chunks_for_1GB = math.ceil(1024 / chunk_size)  # Assuming 1GB = 1024 MB
-        total_cost_for_1GB = num_chunks_for_1GB * average_cost
+        # Calculate total cost based on average duration and number of chunks
+        total_cost = (
+            average_time * num_chunks * 1000 * cost_per_ms_per_mb * (memory / 1024)
+        )
 
-        total_time_for_1GB = average_time
-
-        costs_for_1GB.append(total_cost_for_1GB)
-        times_for_1GB.append(total_time_for_1GB)
-        details_for_1GB.append((chunk_size, memory, num_chunks_for_1GB))
+        costs.append(total_cost)
+        times.append(average_time)
+        details_for_dataset.append((chunk_size, memory, num_chunks))
 
     pareto_costs, pareto_times, pareto_details = find_pareto(
-        costs_for_1GB, times_for_1GB, details_for_1GB
+        costs, times, details_for_dataset
     )
 
     plt.figure(figsize=(15, 10))
-    plt.title("Pareto Analysis: Cost vs Execution Time for Processing 1GB")
+    plt.title(
+        f"Pareto Analysis: Cost vs Execution Time for Processing {dataset_size} MB"
+    )
 
-    plt.scatter(times_for_1GB, costs_for_1GB, color="grey", label="All Points")
-
+    plt.scatter(times, costs, color="grey", label="All Points")
     plt.scatter(
         pareto_times,
         pareto_costs,
@@ -461,7 +470,6 @@ def plot_cost_vs_time_for_1GB(collection, save_dir):
         edgecolor="black",
         label="Pareto Optimal Points",
     )
-
     for i, (cost, time, detail) in enumerate(
         zip(pareto_costs, pareto_times, pareto_details)
     ):
@@ -487,7 +495,113 @@ def plot_cost_vs_time_for_1GB(collection, save_dir):
     plt.grid(True)
     plt.tight_layout()
 
-    save_path = os.path.join(save_dir, "pareto_analysis_for_1GB.png")
+    save_path = os.path.join(save_dir, f"pareto_analysis_for_{dataset_size}MB.png")
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Pareto plot saved to: {save_path}")
+
+
+def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_size):
+    cost_per_ms_per_mb = 0.0000000167
+    data_for_plot = defaultdict(list)
+    average_data = defaultdict(lambda: defaultdict(list))
+
+    for step, job in job_collection:
+        if step == step_name:
+            runtime_mem, chunk_size = job.memory, job.chunk_size
+            acc_cost = 0
+            for worker in job.profilers:
+                acc_cost += (
+                    (worker.worker_end_tstamp - worker.worker_start_tstamp)
+                    * 1000
+                    * cost_per_ms_per_mb
+                    * (runtime_mem / 1024)
+                )
+            job_key = (chunk_size, runtime_mem, len(job.profilers))
+            average_data[job_key]["times"].append(job.end_time - job.start_time)
+            average_data[job_key]["costs"].append(acc_cost)
+
+    for key, values in average_data.items():
+        avg_time = np.mean(values["times"])
+        avg_cost = np.mean(values["costs"])
+        data_for_plot[key[0]].append((avg_time, avg_cost, key[1], key[0], key[2]))
+
+    plt.figure(figsize=(15, 10))
+    colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
+
+    for i, (chunk_size, data) in enumerate(data_for_plot.items()):
+        times, costs, memories, num_workers = zip(
+            *[(d[0], d[1], d[2], d[4]) for d in data]
+        )
+        plt.scatter(times, costs, color=colors[i], alpha=0.5)
+        plt.plot(times, costs, color=colors[i], alpha=0.5)
+
+    all_times, all_costs = zip(
+        *[(d[0], d[1]) for data in data_for_plot.values() for d in data]
+    )
+    pareto_front = is_pareto_efficient(np.vstack((all_times, all_costs)).T)
+    plt.scatter(
+        np.array(all_times)[pareto_front],
+        np.array(all_costs)[pareto_front],
+        color="red",
+    )
+
+    annotations = []
+    for chunk_size, data in data_for_plot.items():
+        for time, cost, mem, workers in [(d[0], d[1], d[2], d[4]) for d in data]:
+            annotation_text = f"{mem} MB, {cost:.4f}, {workers} workers, {time:.2f}s"
+            annotations.append((time, cost, annotation_text))
+
+    def check_overlap(annotation, other_annotations):
+        for other in other_annotations:
+            if (abs(annotation[0] - other[0]) < 0.05) and (
+                abs(annotation[1] - other[1]) < 0.05
+            ):
+                return True
+        return False
+
+    for time, cost, annotation_text in annotations:
+        xytext = (20, 20)
+        while check_overlap((time + xytext[0], cost + xytext[1]), annotations):
+            xytext = (xytext[0] + 10, xytext[1] + 10)
+
+        plt.annotate(
+            annotation_text,
+            xy=(time, cost),
+            xytext=xytext,
+            textcoords="offset points",
+            ha="right",
+            va="bottom",
+            arrowprops=dict(
+                arrowstyle="->", connectionstyle="arc3,rad=.2", color="black"
+            ),
+            fontsize=6,
+        )
+
+    plt.title(
+        f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB"
+    )
+    plt.xlabel("Execution Time (seconds)")
+    plt.ylabel("Cost")
+    plt.legend(
+        [plt.Line2D([0], [0], color=c, lw=4) for c in colors]
+        + [
+            plt.Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                label="Pareto Frontier",
+                markersize=10,
+                markerfacecolor="red",
+            )
+        ],
+        [f"Chunk Size: {cs} MB" for cs in data_for_plot.keys()] + ["Pareto Frontier"],
+    )
+    plt.grid(True)
+    plt.tight_layout()
+    save_path = os.path.join(save_dir, f"pareto_analysis_{step_name}.png")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(save_path)
     plt.close()

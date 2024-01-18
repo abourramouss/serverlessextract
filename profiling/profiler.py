@@ -73,9 +73,12 @@ def profiling_context():
         yield profiler
     finally:
         parent_conn.send("stop")
-        received_profiler_data = parent_conn.recv()
-        profiler.update(received_profiler_data)
-        monitoring_process.join()
+        monitoring_process.join(timeout=10)
+        if parent_conn.poll():
+            received_profiler_data = parent_conn.recv()
+            profiler.update(received_profiler_data)
+        if monitoring_process.is_alive():
+            monitoring_process.terminate()
         parent_conn.close()
         child_conn.close()
 
@@ -301,6 +304,9 @@ class MetricCollector:
 
 class Profiler:
     def __init__(self):
+        self.worker_id = None
+        self.worker_start_tstamp = None
+        self.worker_end_tstamp = None
         self.metrics = MetricCollector()
         self.function_timers = []
 
@@ -327,6 +333,15 @@ class Profiler:
                 FunctionTimer.from_dict(timer) for timer in data["function_timers"]
             ]
 
+        if "worker_id" in data:
+            profiler.worker_id = data["worker_id"]
+
+        if "worker_start_tstamp" in data:
+            profiler.worker_start_tstamp = data["worker_start_tstamp"]
+
+        if "worker_end_tstamp" in data:
+            profiler.worker_end_tstamp = data["worker_end_tstamp"]
+
         return profiler
 
     def __repr__(self):
@@ -336,19 +351,23 @@ class Profiler:
 
     def start_profiling(self, conn, parent_pid):
         index = 0
-        while True:
-            # Collect metrics at the start of each loop iteration
-            self.metrics.collect_all_metrics(parent_pid, index)
-            index += 1
+        try:
+            while True:
+                self.metrics.collect_all_metrics(parent_pid, index)
+                index += 1
 
-            if conn.poll():
-                message = conn.recv()
-                if message == "stop":
-                    print("Received stop signal, completing current data collection.")
-                    self.metrics.collect_all_metrics(parent_pid, index)
-                    conn.send(self)
-                    conn.close()
-                    break
+                if conn.poll():
+                    message = conn.recv()
+                    if message == "stop":
+                        print(
+                            "Received stop signal, completing current data collection."
+                        )
+                        conn.send(self)
+                        break
+        except Exception as e:
+            print(f"Exception in profiling process: {e}")
+        finally:
+            conn.close()
 
     def update(self, received_data):
         if not isinstance(received_data, Profiler):
@@ -358,6 +377,9 @@ class Profiler:
 
     def to_dict(self):
         return {
+            "worker_id": self.worker_id,
+            "worker_start_tstamp": self.worker_start_tstamp,
+            "worker_end_tstamp": self.worker_end_tstamp,
             "metrics": self.metrics.to_dict(),
             "function_timers": [timer.to_dict() for timer in self.function_timers],
         }

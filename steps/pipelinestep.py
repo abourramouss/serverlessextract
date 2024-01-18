@@ -3,7 +3,7 @@ import pickle
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
-import time
+from pprint import pprint
 from profiling import profiling_context
 
 
@@ -37,8 +37,9 @@ class PipelineStep(ABC):
     def build_command(self, ms: S3Path, parameters: str, output_ms: S3Path):
         pass
 
-    def _execute_step(self, *args, **kwargs):
+    def _execute_step(self, id, *args, **kwargs):
         # Call the context manager, and it will start the profiler in a separate process
+        print(f"Worker {id} executing step")
         if "args" in kwargs and isinstance(kwargs["args"], tuple):
             command_args = kwargs["args"]
         else:
@@ -47,6 +48,7 @@ class PipelineStep(ABC):
         with profiling_context() as profiler:
             function_timers = self.build_command(*command_args)
         profiler.function_timers = function_timers
+        profiler.worker_id = id
         return profiler
 
     def run(
@@ -78,26 +80,12 @@ class PipelineStep(ABC):
         futures = function_executor.map(
             self._execute_step, s3_paths, extra_env=extra_env
         )
-        print("Waiting for futures to complete", futures)
+
         results = function_executor.get_result(futures)
+
+        # asociate futures worker_start_tstamp and worker_end_tstamp to the profiler via the profiler.worker_id and the futures position
+        for result in results:
+            worker_id = result.worker_id
+            result.worker_start_tstamp = futures[worker_id].stats["worker_start_tstamp"]
+            result.worker_end_tstamp = futures[worker_id].stats["worker_end_tstamp"]
         return results
-
-    """
-    This code is for ms as a directory, instead of zipping it.
-    
-    unique_partitions = set()
-
-    partition_subset = 0
-    # Iterate over each key
-    for key in keys:
-        # Split the key into its parts
-        parts = key.split("/")
-        # Extract the directory that ends in .ms
-        partition = next((part for part in parts if part.endswith(".ms")), None)
-        if partition and partition_subset < func_limit:
-            # Combine the prefix with the partition
-
-            full_partition_path = "/".join(parts[: parts.index(partition) + 1])
-            unique_partitions.add(full_partition_path)
-            partition_subset = len(unique_partitions)
-    """

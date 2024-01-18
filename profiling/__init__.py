@@ -7,4 +7,4 @@ from .profiler import (
     DiskMetric,
     NetworkMetric,
 )
-from .profilercollection import ProfilerCollection, StepProfiler
+from .profilercollection import JobCollection, Step, Job
