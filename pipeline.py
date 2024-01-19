@@ -123,8 +123,10 @@ runtime_memories = [1769, 3538, 5308, 7076, 10240]
 storage = Storage()
 file_path = "profilers_data.json"
 constant = 700
-
-for i in range(1, 10):
+plot_cost_vs_time_pareto_real(
+    collection, "rebinning/cost_vs_time_pareto_real", "RebinningStep", 1091
+)
+for i in range(2):
     for path in input_data_paths:
         for mem in runtime_memories:
             parameters["RebinningStep"]["input_data_path"] = S3Path(path)
@@ -176,7 +178,6 @@ for i in range(1, 10):
                 mem,
                 chunk_size,
             )
-
     plot_cost_vs_time_pareto_real(
         collection, "rebinning/cost_vs_time_pareto_real", "RebinningStep", 1091
     )
