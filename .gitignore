@@ -7,3 +7,4 @@ extract/
 *.png
 profilers_data.json
 profilers_data_simulation.json
+profilers_data_1100mb.json

@@ -523,33 +523,49 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
             average_data[job_key]["costs"].append(acc_cost)
 
     for key, values in average_data.items():
-        avg_time = np.mean(values["times"])
-        avg_cost = np.mean(values["costs"])
-        data_for_plot[key[0]].append((avg_time, avg_cost, key[1], key[0], key[2]))
+        avg_time = np.median(values["times"])
+        avg_cost = np.median(values["costs"])
+        std_time = np.std(values["times"])
+        std_cost = np.std(values["costs"])
+        data_for_plot[key[0]].append(
+            (avg_time, avg_cost, std_time, std_cost, key[1], key[2])
+        )
 
     plt.figure(figsize=(15, 10))
     colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
 
     for i, (chunk_size, data) in enumerate(data_for_plot.items()):
-        times, costs, memories, num_workers = zip(
-            *[(d[0], d[1], d[2], d[4]) for d in data]
+        times, costs, std_times, std_costs, memories, num_workers = zip(*data)
+        plt.errorbar(
+            times,
+            costs,
+            xerr=std_times,
+            yerr=std_costs,
+            fmt="o",
+            color=colors[i],
+            alpha=0.5,
+            capsize=5,
         )
-        plt.scatter(times, costs, color=colors[i], alpha=0.5)
-        plt.plot(times, costs, color=colors[i], alpha=0.5)
+        plt.plot(times, costs, color=colors[i], alpha=0.5)  # Connecting lines
 
-    all_times, all_costs = zip(
-        *[(d[0], d[1]) for data in data_for_plot.values() for d in data]
-    )
+    all_data = [(d[0], d[1]) for data in data_for_plot.values() for d in data]
+    all_times, all_costs = zip(*all_data)
     pareto_front = is_pareto_efficient(np.vstack((all_times, all_costs)).T)
+    pareto_times = np.array(all_times)[pareto_front]
+    pareto_costs = np.array(all_costs)[pareto_front]
+
     plt.scatter(
-        np.array(all_times)[pareto_front],
-        np.array(all_costs)[pareto_front],
+        pareto_times,
+        pareto_costs,
         color="red",
+        edgecolor="black",
+        label="Pareto Frontier",
+        zorder=3,
     )
 
     annotations = []
     for chunk_size, data in data_for_plot.items():
-        for time, cost, mem, workers in [(d[0], d[1], d[2], d[4]) for d in data]:
+        for time, cost, _, _, mem, workers in data:
             annotation_text = f"{mem} MB, {cost:.4f}, {workers} workers, {time:.2f}s"
             annotations.append((time, cost, annotation_text))
 
@@ -601,6 +617,7 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
     )
     plt.grid(True)
     plt.tight_layout()
+
     save_path = os.path.join(save_dir, f"pareto_analysis_{step_name}.png")
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(save_path)

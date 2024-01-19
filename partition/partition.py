@@ -1,9 +1,11 @@
 from casacore.tables import table
 import os
 import numpy as np
-from upload import upload_directory_to_s3
 import shutil
 import zipfile
+import time
+from upload import upload_directory_to_s3
+import matplotlib.pyplot as plt
 
 
 def remove(path):
@@ -36,18 +38,18 @@ class Partitioner:
         self.input_files = input_files
 
     def partition_chunks(self, num_chunks):
+        overall_start_time = time.time()
+        times_per_partition = []
         os.makedirs("partitions", exist_ok=True)
         partition_counter = 1
+
         for input_file in self.input_files:
             t = table(input_file, readonly=False)
-            t = t.sort("TIME")  # Sort the table based on the time column
+            t = t.sort("TIME")  # Sort the table
             num_rows = len(t)
             original_times = np.array(t.getcol("TIME"))
-
-            total_duration = (
-                original_times[-1] - original_times[0]
-            )  # Calculate total duration
-            chunk_duration = total_duration / num_chunks  # Calculate chunk duration
+            total_duration = original_times[-1] - original_times[0]
+            chunk_duration = total_duration / num_chunks
 
             start_time = original_times[0]
             end_time = start_time + chunk_duration
@@ -56,87 +58,115 @@ class Partitioner:
             for i in range(num_rows):
                 current_time = original_times[i]
                 if current_time >= end_time:
+                    partition_start_time = (
+                        time.time()
+                    )  # Start timing for this partition
+
                     partition = t.selectrows(np.arange(start_index, i))
-                    partition_times = np.array(partition.getcol("TIME"))
-
-                    # Check for an exact match in the elements and size between the partition and the slice from the original array
-                    is_exact_subset = np.array_equal(
-                        np.sort(partition_times), np.sort(original_times[start_index:i])
-                    )
-                    print(
-                        f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}"
-                    )
-
-                    print(
-                        f"Partitioning rows {start_index} to {i} into {partition.nrows()} rows"
-                    )
                     partition_name = f"partitions/partition_{partition_counter}.ms"
                     partition.copy(partition_name, deep=True)
-
                     partition.close()
+
+                    partition_end_time = time.time()  # End timing for this partition
+                    times_per_partition.append(
+                        partition_end_time - partition_start_time
+                    )
 
                     start_time = current_time
                     end_time = start_time + chunk_duration
-                    start_index = i  # Start next partition at current row
+                    start_index = i
                     partition_counter += 1
 
-                if i % 100000 == 0:  # Print a progress update every 100,000 rows
+                if i % 100000 == 0:
                     print(f"Processed {i} rows")
 
             if start_index < num_rows:
+                # Handle the last partition
+                partition_start_time = time.time()
                 partition = t.selectrows(np.arange(start_index, num_rows))
-                partition_times = np.array(partition.getcol("TIME"))
-
-                # Check for an exact match in the elements and size between the partition and the slice from the original array
-                is_exact_subset = np.array_equal(
-                    np.sort(partition_times), np.sort(original_times[start_index:])
-                )
-                print(
-                    f"Partition {partition_counter} is exact subset of original table slice? {is_exact_subset}"
-                )
-
-                print(
-                    f"Partitioning rows {start_index} to {num_rows} into {partition.nrows()} rows"
-                )
                 partition_name = f"partitions/partition_{partition_counter}.ms"
                 partition.copy(partition_name, deep=True)
-
                 partition.close()
+                partition_end_time = time.time()
+                times_per_partition.append(partition_end_time - partition_start_time)
 
             t.close()
 
-        return partition_counter - 1
+        overall_end_time = time.time()
+        total_time = overall_end_time - overall_start_time
+        average_time = sum(times_per_partition) / len(times_per_partition)
+        return partition_counter - 1, total_time, average_time
 
 
 if __name__ == "__main__":
-    partitions = [9, 4, 2, 1]
+    partitions = [61, 30, 15, 7, 3, 2]
+
+    total_times = []
+    average_times = []
+    zip_times = []
+    upload_times = []
+
     for pr in partitions:
-        p = Partitioner("/home/ayman/Desktop/partition_1.ms")
-        total_partitions = p.partition_chunks(pr)
-        print(f"Total partitions created: {total_partitions+1}")
-        # List the partition directories after partitioning is complete
+        p = Partitioner("/home/ayman/Downloads/SB205.MS")
+        total_partitions, total_time, average_time = p.partition_chunks(pr)
+        total_times.append(total_time)
+        average_times.append(average_time)
+
         dir_partitions = os.listdir("partitions")
-        # Zip each partition directory
+        start_zip_time = time.time()
         for partition in dir_partitions:
             partition_dir = f"partitions/{partition}"
-            if os.path.isdir(partition_dir):  # Make sure it's a directory
+            if os.path.isdir(partition_dir):
                 zip_directory_without_compression(
                     partition_dir, f"{partition_dir}.zip", partition
                 )
+        zip_duration = time.time() - start_zip_time
+        zip_times.append(zip_duration)
 
-        # Now that each partition is zipped, you can remove the directories
         for partition in dir_partitions:
             partition_dir = f"partitions/{partition}"
             remove(partition_dir)
 
-        # Finally, upload to S3
+        start_upload_time = time.time()
         upload_directory_to_s3(
             "partitions",
             "ayman-extract",
-            f"partitions/partitions_1100MB_{pr}zip",
+            f"partitions/partitions_{pr}zip",
         )
+        upload_duration = time.time() - start_upload_time
+        upload_times.append(upload_duration)
 
-        # Remove the zip files
         for partition in dir_partitions:
             partition_dir = f"partitions/{partition}.zip"
             remove(partition_dir)
+
+    # Plotting and saving the plot
+    os.makedirs("rebinning/partitioning", exist_ok=True)
+    plt.figure(figsize=(18, 6))
+
+    plt.subplot(1, 3, 1)
+    plt.plot(partitions, total_times, marker="o")
+    plt.xlabel("Number of Partitions")
+    plt.ylabel("Total Time (seconds)")
+    plt.title("Total Time for Partitioning vs Number of Partitions")
+    plt.gca().invert_xaxis()
+
+    plt.subplot(1, 3, 2)
+    plt.plot(partitions, zip_times, marker="o", color="green")
+    plt.xlabel("Number of Partitions")
+    plt.ylabel("Total Zip Time (seconds)")
+    plt.title("Total Zip Time vs Number of Partitions")
+    plt.gca().invert_xaxis()
+
+    plt.subplot(1, 3, 3)
+    plt.plot(partitions, upload_times, marker="o", color="blue")
+    plt.xlabel("Number of Partitions")
+    plt.ylabel("Upload Time (seconds)")
+    plt.title("Upload Time vs Number of Partitions")
+    plt.gca().invert_xaxis()
+
+    plt.tight_layout()
+    plot_filename = "rebinning/partitioning/partitioning_performance_plot.png"
+    plt.savefig(plot_filename)
+    plt.show()
+    print(f"Plot saved as {plot_filename}")
