@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.cm as cm
 import math
+from adjustText import adjust_text
+
 from profiling import JobCollection
 
 
@@ -269,6 +271,9 @@ def plot_gantt(
     # Find the earliest average start time
     min_start_time = min(data["avg_start"] for data in timer_data.values())
 
+    # Set global font size
+    plt.rcParams.update({"font.size": 18})
+
     # Plotting
     figure_height = len(timer_data) * 2
     fig, ax = plt.subplots(figsize=(10, figure_height))
@@ -285,15 +290,21 @@ def plot_gantt(
         text_x = relative_start_time + data["avg_duration"] / 2
         text_y = idx
         ax.text(
-            text_x, text_y, f"{data['avg_duration']:.2f}s", va="center", ha="center"
+            text_x,
+            text_y,
+            f"{data['avg_duration']:.2f}s",
+            va="center",
+            ha="center",
+            fontsize=18,
         )
 
     ax.set_yticks([0.5 + i for i in range(len(timer_data))])
-    ax.set_yticklabels([label for label in timer_data])
+    ax.set_yticklabels([label for label in timer_data], fontsize=18)
+    ax.tick_params(axis="x", labelsize=18)
     ax.set_ylim(-1, len(timer_data))
-    ax.set_xlabel("Average Time (s) since Start")
-    ax.set_ylabel("Function Timers")
-    ax.set_title("Gantt Chart of Averaged Function Timers")
+    ax.set_xlabel("Average Time (s) since Start", fontsize=18)
+    ax.set_ylabel("Function Timers", fontsize=18)
+    ax.set_title("Gantt Chart of Averaged Function Timers", fontsize=18)
 
     plt.subplots_adjust(left=0.2, bottom=0.2, right=0.75)
     os.makedirs(save_dir, exist_ok=True)
@@ -363,7 +374,8 @@ def plot_cost_vs_time_from_collection(job_collection, save_dir):
     # Setup the plot
     plt.figure(figsize=(15, 10))
     plt.title(
-        "Cost vs Execution Time for Various Chunk Sizes and Memory Configurations"
+        "Cost vs Execution Time for Various Chunk Sizes and Memory Configurations",
+        fontsize=18,
     )
 
     unique_chunk_sizes = set(cs for _, cs in averaged_profilers.keys())
@@ -391,27 +403,70 @@ def plot_cost_vs_time_from_collection(job_collection, save_dir):
         optimal_cost = costs[min_distance_idx]
         optimal_memory = memories[min_distance_idx]
 
+        min_time_idx = np.argmin(times)
+        max_time_idx = np.argmax(times)
+
         # Assign the color for the current chunk size
         color = color_map[chunk_size]
 
-        plt.scatter(times, costs, color=color, label=f"{chunk_size} MB Chunk")
+        plt.scatter(times, costs, color=color, s=50, label=f"{chunk_size} MB Chunk")
         plt.plot(times, costs, color=color)  # Connect points of the same chunk size
-        # Highlight the optimal point
+
+        # Highlight and label the optimal, maximum, and minimum points
         plt.scatter(
-            [optimal_time], [optimal_cost], color=color, edgecolor="black", marker="D"
+            [optimal_time],
+            [optimal_cost],
+            color=color,
+            edgecolor="black",
+            marker="D",
+            s=100,
+        )
+        plt.scatter(
+            [times[max_time_idx]],
+            [costs[max_time_idx]],
+            color=color,
+            edgecolor="black",
+            marker="X",
+            s=100,
+        )
+        plt.scatter(
+            [times[min_time_idx]],
+            [costs[min_time_idx]],
+            color=color,
+            edgecolor="black",
+            marker="X",
+            s=100,
         )
         plt.text(
             optimal_time,
             optimal_cost,
-            f"{optimal_memory} MB (Optimal)",
-            fontsize=9,
+            f"Optimal: {optimal_memory} MB",
+            fontsize=14,
+            ha="right",
+            va="bottom",
+        )
+        plt.text(
+            times[max_time_idx],
+            costs[max_time_idx],
+            f"Max: {memories[max_time_idx]} MB",
+            fontsize=14,
+            ha="right",
+            va="bottom",
+        )
+        plt.text(
+            times[min_time_idx],
+            costs[min_time_idx],
+            f"Min: {memories[min_time_idx]} MB",
+            fontsize=14,
             ha="right",
             va="bottom",
         )
 
-    plt.xlabel("Execution Time (seconds)")
-    plt.ylabel("Cost")
-    plt.legend()
+    plt.xlabel("Execution Time (seconds)", fontsize=16)
+    plt.ylabel("Cost", fontsize=16)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.legend(fontsize=14)
     plt.grid(True)
     plt.tight_layout()
 
@@ -420,6 +475,124 @@ def plot_cost_vs_time_from_collection(job_collection, save_dir):
     plt.savefig(save_path)
     plt.close()
     print(f"Plot saved to: {save_path}")
+
+
+def calculate_speedup(baseline_time, current_time):
+    return baseline_time / current_time if current_time else 0
+
+
+def plot_speedup_vs_cost_from_collection(job_collection, save_dir):
+    cost_per_ms_per_mb = 0.0000000167
+    averaged_profilers = defaultdict(lambda: defaultdict(list))
+
+    # Process the collection data
+    for step_name, job in job_collection:
+        for profiler in job.profilers:
+            total_time_worker = (
+                profiler.worker_end_tstamp - profiler.worker_start_tstamp
+            )
+            cost = total_time_worker * 1000 * cost_per_ms_per_mb * (job.memory / 1024)
+            key = (job.memory, job.chunk_size)
+            averaged_profilers[key]["times"].append(total_time_worker)
+            averaged_profilers[key]["costs"].append(cost)
+
+    # Calculate baseline times for each chunk size and calculate speed-up
+    speedup_cost_data = defaultdict(list)
+    for chunk_size in set(cs for _, cs in averaged_profilers.keys()):
+        # Find the baseline time for this chunk size
+        baseline_times = [
+            np.mean(values["times"])
+            for (mem, cs), values in averaged_profilers.items()
+            if cs == chunk_size
+        ]
+        baseline_time = min(baseline_times) if baseline_times else float("inf")
+
+        # Calculate speed-up and average cost for this chunk size
+        for (memory, cs), values in averaged_profilers.items():
+            if cs == chunk_size:
+                average_time = np.mean(values["times"])
+                average_cost = np.mean(values["costs"])
+                speedup = calculate_speedup(baseline_time, average_time)
+                speedup_cost_data[chunk_size].append((speedup, average_cost))
+
+    # Setup the plot
+    plt.figure(figsize=(15, 10))
+    plt.title("Cost vs Average Speed-up for Each Chunk Size Configuration", fontsize=18)
+
+    # Plot each chunk size's speed-up against cost
+    for chunk_size, speedup_costs in speedup_cost_data.items():
+        speedups, costs = zip(*speedup_costs)
+        plt.scatter(speedups, costs, label=f"{chunk_size} MB Chunk")
+
+    plt.xlabel("Average Speed-up", fontsize=16)
+    plt.ylabel("Cost", fontsize=16)
+    plt.xscale("log")  # Use logarithmic scale for better visualization if needed
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.legend(fontsize=14)
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Save the plot
+    save_path = os.path.join(save_dir, "cost_vs_average_speedup.png")
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Cost vs Speed-up plot saved to: {save_path}")
+
+
+def plot_memory_speedup_from_collection(job_collection, save_dir):
+    execution_times = defaultdict(lambda: defaultdict(list))
+
+    # Process the collection data
+    for step_name, job in job_collection:
+        for profiler in job.profilers:
+            total_time_worker = (
+                profiler.worker_end_tstamp - profiler.worker_start_tstamp
+            )
+            key = (job.memory, job.chunk_size)
+            execution_times[key]["times"].append(total_time_worker)
+
+    # Calculate the baseline times for each chunk size
+    baseline_times = {}
+    for key, times in execution_times.items():
+        _, chunk_size = key
+        if chunk_size not in baseline_times:
+            baseline_times[chunk_size] = min(
+                np.mean(times["times"])
+                for (mem, cs) in execution_times
+                if cs == chunk_size
+            )
+
+    # Calculate speed-up for each memory configuration
+    speedup_data = defaultdict(list)
+    for (memory, chunk_size), data in list(execution_times.items()):
+        average_time = np.mean(data["times"])
+        baseline_time = baseline_times[chunk_size]
+        speedup = calculate_speedup(baseline_time, average_time)
+        speedup_data[chunk_size].append((memory, speedup))
+
+    plt.figure(figsize=(15, 10))
+    plt.title("Speed-up When Increasing Runtime Memory", fontsize=18)
+
+    for chunk_size, memory_speedups in speedup_data.items():
+        memory_speedups.sort(key=lambda x: x[0])
+        memories, speedups = zip(*memory_speedups)
+        plt.plot(memories, speedups, marker="o", label=f"Chunk Size {chunk_size} MB")
+
+    plt.xlabel("Memory (MB)", fontsize=16)
+    plt.ylabel("Speed-up", fontsize=16)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.legend(fontsize=14)
+    plt.grid(True)
+    plt.tight_layout()
+
+    save_path = os.path.join(save_dir, "memory_speedup.png")
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Memory Speed-up plot saved to: {save_path}")
 
 
 def plot_cost_vs_time_pareto_simulated(collection, save_dir, dataset_size: int = 1100):
@@ -444,7 +617,6 @@ def plot_cost_vs_time_pareto_simulated(collection, save_dir, dataset_size: int =
         average_time = sum(values["times"]) / len(values["times"])
         num_chunks = math.ceil(dataset_size / chunk_size)
 
-        # Calculate total cost based on average duration and number of chunks
         total_cost = (
             average_time * num_chunks * 1000 * cost_per_ms_per_mb * (memory / 1024)
         )
@@ -535,7 +707,10 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
     colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
 
     for i, (chunk_size, data) in enumerate(data_for_plot.items()):
-        times, costs, std_times, std_costs, memories, num_workers = zip(*data)
+        # Sorting the data based on runtime memory
+        sorted_data = sorted(data, key=lambda x: x[4])  # x[4] is the runtime memory
+        times, costs, std_times, std_costs, memories, num_workers = zip(*sorted_data)
+
         plt.errorbar(
             times,
             costs,
@@ -563,43 +738,33 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
         zorder=3,
     )
 
-    annotations = []
+    texts = []
     for chunk_size, data in data_for_plot.items():
-        for time, cost, _, _, mem, workers in data:
-            annotation_text = f"{mem} MB, {cost:.4f}, {workers} workers, {time:.2f}s"
-            annotations.append((time, cost, annotation_text))
+        for time, cost, std_time, std_cost, mem, workers in data:
+            annotation_text = f"{mem} MB, {workers} workers"
+            texts.append(
+                plt.text(
+                    time + 0.5,
+                    cost,
+                    annotation_text,
+                    ha="left",
+                    va="bottom",
+                    fontsize=12,
+                )
+            )
 
-    def check_overlap(annotation, other_annotations):
-        for other in other_annotations:
-            if (abs(annotation[0] - other[0]) < 0.05) and (
-                abs(annotation[1] - other[1]) < 0.05
-            ):
-                return True
-        return False
-
-    for time, cost, annotation_text in annotations:
-        xytext = (20, 20)
-        while check_overlap((time + xytext[0], cost + xytext[1]), annotations):
-            xytext = (xytext[0] + 10, xytext[1] + 10)
-
-        plt.annotate(
-            annotation_text,
-            xy=(time, cost),
-            xytext=xytext,
-            textcoords="offset points",
-            ha="right",
-            va="bottom",
-            arrowprops=dict(
-                arrowstyle="->", connectionstyle="arc3,rad=.2", color="black"
-            ),
-            fontsize=6,
-        )
+    adjust_text(texts, arrowprops=dict(arrowstyle="->", color="black", lw=0.5))
 
     plt.title(
-        f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB"
+        f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB",
+        fontsize=18,
     )
-    plt.xlabel("Execution Time (seconds)")
-    plt.ylabel("Cost")
+    plt.xlabel("Execution Time (seconds)", fontsize=16)
+    plt.ylabel("Cost", fontsize=16)
+
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+
     plt.legend(
         [plt.Line2D([0], [0], color=c, lw=4) for c in colors]
         + [
@@ -614,6 +779,7 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
             )
         ],
         [f"Chunk Size: {cs} MB" for cs in data_for_plot.keys()] + ["Pareto Frontier"],
+        fontsize=14,
     )
     plt.grid(True)
     plt.tight_layout()

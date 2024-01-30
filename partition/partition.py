@@ -4,53 +4,50 @@ import numpy as np
 import shutil
 import zipfile
 import time
+import json
 from upload import upload_directory_to_s3
 import matplotlib.pyplot as plt
 
 
 def remove(path):
-    """param <path> could either be relative or absolute."""
+    """Remove a file or directory."""
     if os.path.isfile(path) or os.path.islink(path):
-        os.remove(path)  # remove the file
+        os.remove(path)  # Remove the file
     elif os.path.isdir(path):
-        shutil.rmtree(path)  # remove dir and all contains
+        shutil.rmtree(path)  # Remove dir and all contains
     else:
         raise ValueError("file {} is not a file or dir.".format(path))
 
 
 def zip_directory_without_compression(source_dir_path, output_zip_path, partition_name):
-    # Create a zip file with the specified name
+    """Create a zip file without compression from a directory."""
     with zipfile.ZipFile(output_zip_path, "w", zipfile.ZIP_STORED) as zipf:
-        # Recursively add all files in the directory to the zip file
         for root, dirs, files in os.walk(source_dir_path):
             for file in files:
                 file_path = os.path.join(root, file)
-                # Modify the archive name to include 'partition_x' in the path
                 arcname = os.path.join(
                     partition_name, os.path.relpath(file_path, start=source_dir_path)
                 )
-                zipf.write(file_path, arcname=arcname)
+                zipf.write(file_path, arcname)
 
 
-# Class that takes a measurement set and partitions it into chunks, then uploads them to s3
 class Partitioner:
     def __init__(self, *input_files):
         self.input_files = input_files
 
     def partition_chunks(self, num_chunks):
-        overall_start_time = time.time()
-        times_per_partition = []
+        """Partition input files into specified number of chunks."""
+        partition_start_time = time.time()
         os.makedirs("partitions", exist_ok=True)
         partition_counter = 1
 
         for input_file in self.input_files:
             t = table(input_file, readonly=False)
-            t = t.sort("TIME")  # Sort the table
+            t = t.sort("TIME")
             num_rows = len(t)
             original_times = np.array(t.getcol("TIME"))
             total_duration = original_times[-1] - original_times[0]
             chunk_duration = total_duration / num_chunks
-
             start_time = original_times[0]
             end_time = start_time + chunk_duration
             start_index = 0
@@ -58,115 +55,87 @@ class Partitioner:
             for i in range(num_rows):
                 current_time = original_times[i]
                 if current_time >= end_time:
-                    partition_start_time = (
-                        time.time()
-                    )  # Start timing for this partition
-
                     partition = t.selectrows(np.arange(start_index, i))
                     partition_name = f"partitions/partition_{partition_counter}.ms"
                     partition.copy(partition_name, deep=True)
                     partition.close()
-
-                    partition_end_time = time.time()  # End timing for this partition
-                    times_per_partition.append(
-                        partition_end_time - partition_start_time
-                    )
-
                     start_time = current_time
                     end_time = start_time + chunk_duration
                     start_index = i
                     partition_counter += 1
-
                 if i % 100000 == 0:
                     print(f"Processed {i} rows")
-
             if start_index < num_rows:
-                # Handle the last partition
-                partition_start_time = time.time()
                 partition = t.selectrows(np.arange(start_index, num_rows))
                 partition_name = f"partitions/partition_{partition_counter}.ms"
                 partition.copy(partition_name, deep=True)
                 partition.close()
-                partition_end_time = time.time()
-                times_per_partition.append(partition_end_time - partition_start_time)
 
             t.close()
 
-        overall_end_time = time.time()
-        total_time = overall_end_time - overall_start_time
-        average_time = sum(times_per_partition) / len(times_per_partition)
-        return partition_counter - 1, total_time, average_time
+        partition_end_time = time.time()
+        partition_time = partition_end_time - partition_start_time
+        return partition_counter - 1, partition_time
+
+
+def save_to_json(data, filename):
+    """Save data to a JSON file."""
+    with open(filename, "w") as json_file:
+        json.dump(data, json_file, indent=4)
+
+
+def load_from_json(filename):
+    """Load data from a JSON file."""
+    with open(filename, "r") as json_file:
+        data = json.load(json_file)
+    return data
 
 
 if __name__ == "__main__":
-    partitions = [61, 30, 15, 7, 3, 2]
+    partitions = [9, 10, 11, 12]
 
-    total_times = []
-    average_times = []
-    zip_times = []
-    upload_times = []
-
+    results = {}
     for pr in partitions:
-        p = Partitioner("/home/ayman/Downloads/SB205.MS")
-        total_partitions, total_time, average_time = p.partition_chunks(pr)
-        total_times.append(total_time)
-        average_times.append(average_time)
+        total_process_start_time = time.time()
+
+        p = Partitioner("/home/ayman/Desktop/partition_1.ms")
+        total_partitions, partition_time = p.partition_chunks(pr)
 
         dir_partitions = os.listdir("partitions")
+        zipped_partitions_dir = "zipped_partitions"
+        os.makedirs(zipped_partitions_dir, exist_ok=True)
+
         start_zip_time = time.time()
         for partition in dir_partitions:
             partition_dir = f"partitions/{partition}"
+            zip_file = f"{zipped_partitions_dir}/{partition}.zip"
             if os.path.isdir(partition_dir):
-                zip_directory_without_compression(
-                    partition_dir, f"{partition_dir}.zip", partition
-                )
+                zip_directory_without_compression(partition_dir, zip_file, partition)
+                remove(partition_dir)
         zip_duration = time.time() - start_zip_time
-        zip_times.append(zip_duration)
-
-        for partition in dir_partitions:
-            partition_dir = f"partitions/{partition}"
-            remove(partition_dir)
 
         start_upload_time = time.time()
         upload_directory_to_s3(
-            "partitions",
+            zipped_partitions_dir,
             "ayman-extract",
-            f"partitions/partitions_{pr}zip",
+            f"partitions/partitions_1100MB_{pr}zip",
         )
         upload_duration = time.time() - start_upload_time
-        upload_times.append(upload_duration)
 
-        for partition in dir_partitions:
-            partition_dir = f"partitions/{partition}.zip"
-            remove(partition_dir)
+        for zip_file in os.listdir(zipped_partitions_dir):
+            remove(os.path.join(zipped_partitions_dir, zip_file))
+        shutil.rmtree(zipped_partitions_dir)
 
-    # Plotting and saving the plot
-    os.makedirs("rebinning/partitioning", exist_ok=True)
-    plt.figure(figsize=(18, 6))
+        total_process_end_time = time.time()
+        total_process_time = total_process_end_time - total_process_start_time
 
-    plt.subplot(1, 3, 1)
-    plt.plot(partitions, total_times, marker="o")
-    plt.xlabel("Number of Partitions")
-    plt.ylabel("Total Time (seconds)")
-    plt.title("Total Time for Partitioning vs Number of Partitions")
-    plt.gca().invert_xaxis()
+        results[str(pr)] = {
+            "total_partitions": total_partitions,
+            "partition_time": partition_time,
+            "zip_time": zip_duration,
+            "upload_time": upload_duration,
+            "total_process_time": total_process_time,
+        }
 
-    plt.subplot(1, 3, 2)
-    plt.plot(partitions, zip_times, marker="o", color="green")
-    plt.xlabel("Number of Partitions")
-    plt.ylabel("Total Zip Time (seconds)")
-    plt.title("Total Zip Time vs Number of Partitions")
-    plt.gca().invert_xaxis()
-
-    plt.subplot(1, 3, 3)
-    plt.plot(partitions, upload_times, marker="o", color="blue")
-    plt.xlabel("Number of Partitions")
-    plt.ylabel("Upload Time (seconds)")
-    plt.title("Upload Time vs Number of Partitions")
-    plt.gca().invert_xaxis()
-
-    plt.tight_layout()
-    plot_filename = "rebinning/partitioning/partitioning_performance_plot.png"
-    plt.savefig(plot_filename)
-    plt.show()
-    print(f"Plot saved as {plot_filename}")
+    save_to_json(results, "partitioning_results.json")
+    print("Results saved in 'partitioning_results.json'")
