@@ -120,6 +120,14 @@ class JobCollection:
             chunk_size, memory, start_time, end_time, profilers
         )
 
+    def get_jobs_by_memory_and_chunk_size(self, memory, chunk_size):
+        jobs = []
+        for step in self.steps.values():
+            for job in step.jobs:
+                if job.memory == memory and job.chunk_size == chunk_size:
+                    jobs.append(job)
+        return jobs
+
     def to_dict(self):
         return {step_name: step.to_dict() for step_name, step in self.steps.items()}
 
