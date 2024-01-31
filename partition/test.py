@@ -89,40 +89,76 @@ def measure_and_save_results(
     num_executions,
     results_file,
     bucket,
-    s3_prefix,
+    original_file_size,
+    extra_folder,
 ):
     results = []
 
+    storage = Storage()
+    s3_key = "partitions/partitions_7zip/partition_1.ms.zip"
+    download_start_time = time.time()
+    storage.download_file(bucket, s3_key, "/home/ayman/Desktop/partition_1.ms.zip")
+    download_end_time = time.time()
+    download_time = download_end_time - download_start_time
+
+    input_size = get_dir_size(ms_path) / (
+        1024 * 1024
+    )  # get the size of the input file in MB
+
     for num_partitions in range(min_partitions, max_partitions + 1):
         execution_times = []
+        upload_times = []
         for _ in range(num_executions):
             start_time = time.time()
             partition_results = partition_ms(ms_path, num_partitions)
             end_time = time.time()
             execution_times.append(end_time - start_time)
 
-            storage = Storage()
+            output_size = sum([os.path.getsize(r[0]) for r in partition_results]) / (
+                1024 * 1024
+            )  # get the total size of all partition files in MB
+
             for partition_file, _ in partition_results:
-                s3_key = os.path.join(s3_prefix, os.path.basename(partition_file))
+                s3_prefix = f"partitions_{original_file_size}MB_{num_partitions}"
+                s3_key = os.path.join(
+                    extra_folder, s3_prefix, os.path.basename(partition_file)
+                )
                 try:
                     print(f"Uploading {partition_file} to {bucket}/{s3_key}...")
+                    upload_start_time = time.time()
                     storage.upload_file(partition_file, bucket, key=s3_key)
+                    upload_end_time = time.time()
+                    upload_times.append(upload_end_time - upload_start_time)
                     print(f"Upload finished for {partition_file}")
                 except Exception as e:
                     print(f"An exception occurred: {e}")
 
         avg_execution_time = sum(execution_times) / num_executions
+        avg_upload_time = sum(upload_times) / len(upload_times) if upload_times else 0
+        total_time = download_time + avg_execution_time + avg_upload_time
         results.append(
-            {"num_partitions": num_partitions, "avg_execution_time": avg_execution_time}
+            {
+                "num_partitions": num_partitions,
+                "avg_execution_time": avg_execution_time,
+                "avg_upload_time": avg_upload_time,
+                "input_size": input_size,
+                "output_size": output_size,
+                "total_time": total_time,
+                "download_time": download_time,
+            }
         )
         print(
             f"Avg execution time for {num_partitions} partitions: {avg_execution_time} seconds"
         )
+        print(
+            f"Avg upload time for {num_partitions} partitions: {avg_upload_time} seconds"
+        )
+        print(f"Total time for {num_partitions} partitions: {total_time} seconds")
 
     with open(results_file, "w") as file:
         json.dump(results, file)
 
-    storage = Storage()
+    s3_key = os.path.join(extra_folder, "results", results_file)
     try:
         print(f"Uploading {results_file} to {bucket}/{s3_key}...")
         storage.upload_file(results_file, bucket, key=s3_key)
@@ -135,8 +171,9 @@ measure_and_save_results(
     "/home/ayman/Desktop/partition_1.ms",
     2,
     5,
-    3,
+    1,
     "results.json",
     "ayman-extract",
-    "partitions/partitions_1100MB_2-5zip",
+    1100,
+    "partitions",
 )
