@@ -93,13 +93,16 @@ def measure_and_save_results(
     extra_folder,
 ):
     results = []
-
+    storage = Storage()
+    """
     storage = Storage()
     s3_key = "partitions/partitions_7zip/partition_1.ms.zip"
     download_start_time = time.time()
     storage.download_file(bucket, s3_key, "/home/ayman/Desktop/partition_1.ms.zip")
     download_end_time = time.time()
     download_time = download_end_time - download_start_time
+    
+    """
 
     input_size = get_dir_size(ms_path) / (
         1024 * 1024
@@ -135,7 +138,7 @@ def measure_and_save_results(
 
         avg_execution_time = sum(execution_times) / num_executions
         avg_upload_time = sum(upload_times) / len(upload_times) if upload_times else 0
-        total_time = download_time + avg_execution_time + avg_upload_time
+        total_time = avg_execution_time + avg_upload_time
         results.append(
             {
                 "num_partitions": num_partitions,
@@ -144,7 +147,6 @@ def measure_and_save_results(
                 "input_size": input_size,
                 "output_size": output_size,
                 "total_time": total_time,
-                "download_time": download_time,
             }
         )
         print(
@@ -168,7 +170,7 @@ def measure_and_save_results(
 
 
 measure_and_save_results(
-    "/home/ayman/Desktop/partition_1.ms",
+    "/home/ayman/Work/partition_1.ms",
     2,
     5,
     1,

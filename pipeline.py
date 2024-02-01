@@ -113,7 +113,7 @@ input_data_paths = [
     # "/ayman-extract/partitions/partitions_1100MB_9zip/",
     # "/ayman-extract/partitions/partitions_1100MB_4zip/",
     # "/ayman-extract/partitions/partitions_1100MB_2zip/",
-    "/ayman-extract/partitions/partitions_1100MB_1zip/",
+    "/ayman-extract/partitions/partitions_1091MB_7/",
 ]
 
 file_path = "profilers.json"
@@ -137,7 +137,7 @@ for path in input_data_paths:
         parameters["RebinningStep"]["input_data_path"] = S3Path(path)
         chunk_size = storage.head_object(
             parameters["RebinningStep"]["input_data_path"].bucket,
-            f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
+            f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.zip",
         )
         chunk_size = int(chunk_size["content-length"]) // MB
         print("Chunk size:", chunk_size)
