@@ -142,8 +142,8 @@ class IMetricCollector:
 class CPUMetricCollector(IMetricCollector):
     def _collect(self, pid, timestamp, collection_id):
         try:
-            # cpu_usage = psutil.Process(pid).cpu_percent(interval=0.3)
-            cpu_usage = psutil.Process(pid).cpu_percent()
+            cpu_usage = psutil.Process(pid).cpu_percent(interval=0.3)
+            # cpu_usage = psutil.Process(pid).cpu_percent()
             return CPUMetric(
                 timestamp=timestamp,
                 pid=pid,

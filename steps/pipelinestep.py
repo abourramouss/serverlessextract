@@ -83,7 +83,8 @@ class PipelineStep(ABC):
 
         results = function_executor.get_result(futures)
 
-        # asociate futures worker_start_tstamp and worker_end_tstamp to the profiler via the profiler.worker_id and the futures position
+        # asociate futures worker_start_tstamp and worker_end_tstamp to the profiler via the profiler.worker_id and the futures position.
+        # this way we wrap around customized profiling with lithops own stats for each worker.
         for result in results:
             worker_id = result.worker_id
             result.worker_start_tstamp = futures[worker_id].stats["worker_start_tstamp"]
