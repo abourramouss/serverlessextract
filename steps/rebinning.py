@@ -38,7 +38,7 @@ class RebinningStep(PipelineStep):
     def build_command(self, ms: S3Path, parameters: str, output_ms: S3Path):
         working_dir = PosixPath(
             os.getenv("HOME")
-        )  # this is set to /tmp, to respect lambda convention
+        )  # this is set to /tmp, to respect lambda convention.
 
         time_records = []
 
@@ -52,9 +52,10 @@ class RebinningStep(PipelineStep):
         partition_path = time_it(
             "unzip", data_source.unzip, time_records, partition_path
         )
-
+        print("listing directory")
         ms_name = str(partition_path).split("/")[-1]
-
+        print(partition_path)
+        print(ms_name)
         # Profile the download_file method
         aoflag_path = time_it(
             "download_parameters",
@@ -82,6 +83,7 @@ class RebinningStep(PipelineStep):
         # Profile the process execution
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
 
+        print("stdout:")
         print(stdout)
         print(stderr)
         posix_source = time_it("zip", data_source.zip, time_records, PosixPath(msout))

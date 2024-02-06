@@ -67,13 +67,16 @@ class DataSource(ABC):
 
     def unzip(self, ms: PosixPath) -> PosixPath:
         zip_file = zipfile.ZipFile(ms)
-        extract_path = (
-            ms.parent
-        )  # Set the extract path to the parent directory of the zip file
+        extract_path = ms.parent
         zip_file.extractall(extract_path)
         zip_file.close()
 
-        # Construct the new path to the .ms directory
-        part_name = ms.stem
-        new_ms_path = extract_path / part_name
+        root_items = {item.split("/")[0] for item in zip_file.namelist()}
+        if len(root_items) == 1:
+            part_name = next(iter(root_items))
+            new_ms_path = extract_path / part_name
+        else:
+            new_ms_path = extract_path
+
+        print(f"Unzipped to: {new_ms_path}")
         return new_ms_path
