@@ -4,6 +4,7 @@ from typing import Union
 from s3path import S3Path
 import zipfile
 import os
+import subprocess
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -29,26 +30,21 @@ class DataSource(ABC):
             for key, value in parset_dict.items():
                 f.write(f"{key}={value}\n")
 
-    def zip(self, ms: PosixPath) -> PosixPath:
+    def zip_without_compression(self, ms: PosixPath) -> PosixPath:
         print(f"Zipping directory: {ms}")
-        zip_filepath = PosixPath(
-            f"{ms.parent}/{ms.name}.zip"
-        )  # File path for the new zip file
-        with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        zip_filepath = PosixPath(f"{ms.parent}/{ms.name}.zip")
+        with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_STORED) as zip_file:
             for root, dirs, files in os.walk(ms):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    # Include the partition folder name in the zip file
                     arcname = os.path.relpath(file_path, start=ms.parent)
                     zip_file.write(file_path, arcname)
         return zip_filepath
 
     def zip_files(self, ms: PosixPath, h5_file: PosixPath) -> PosixPath:
-        partition_name = ms.name  # Assuming ms.name is something like 'partition_1.ms'
+        partition_name = ms.name
         zip_filepath = PosixPath(f"{ms.parent}/{partition_name}.zip")
-
         with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # Add .ms files to the zip, within a subfolder named 'partition_x.ms/ms'
             for root, dirs, files in os.walk(ms):
                 for file in files:
                     file_path = os.path.join(root, file)
@@ -59,11 +55,29 @@ class DataSource(ABC):
                     )
                     zip_file.write(file_path, arcname)
 
-            # Add .h5 file to the zip, within a subfolder named 'partition_x.ms/h5'
             h5_arcname = os.path.join(partition_name, "h5", h5_file.name)
             zip_file.write(h5_file, h5_arcname)
 
         return zip_filepath
+
+    def unzip_fast(self, ms: PosixPath) -> PosixPath:
+        extract_path = ms.parent
+        # Execute the unzip command
+        subprocess.run(["unzip", "-q", str(ms), "-d", str(extract_path)], check=True)
+
+        # Determine the new main directory, similar to your original logic
+        zip_file = zipfile.ZipFile(ms)
+        root_items = {item.split("/")[0] for item in zip_file.namelist()}
+        zip_file.close()  # Close the zip file as we only needed it for listing contents
+
+        if len(root_items) == 1:
+            part_name = next(iter(root_items))
+            new_ms_path = extract_path / part_name
+        else:
+            new_ms_path = extract_path
+
+        print(f"Unzipped to: {new_ms_path}")
+        return new_ms_path
 
     def unzip(self, ms: PosixPath) -> PosixPath:
         zip_file = zipfile.ZipFile(ms)

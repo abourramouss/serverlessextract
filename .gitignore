@@ -10,3 +10,4 @@ profilers_data_simulation.json
 profilers_data_1100mb.json
 GA.py
 *.json
+ec2extract/
