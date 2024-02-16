@@ -1,10 +1,13 @@
 import lithops
 import pickle
+import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
 from pprint import pprint
 from profiling import profiling_context
+from profiling import Job
+import os
 
 
 class PipelineStep(ABC):
@@ -45,17 +48,17 @@ class PipelineStep(ABC):
         else:
             raise ValueError("Expected 'args' key with a tuple value in kwargs")
         # Yields a profiler object, creates a new process for profiling.
-        with profiling_context() as profiler:
+        with profiling_context(os.getpid()) as profiler:
             function_timers = self.build_command(*command_args)
         profiler.function_timers = function_timers
         profiler.worker_id = id
         return profiler
 
     def run(
-        self, func_limit: Optional[int] = None, runtime_memory: Optional[int] = None
+        self, chunk_size: int, runtime_memory: int, func_limit: Optional[int] = None
     ):
-        extra_env = {"HOME": "/tmp"}
 
+        extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(runtime_memory=runtime_memory)
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
@@ -64,7 +67,7 @@ class PipelineStep(ABC):
         if f"{self.input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
         if func_limit:
-            keys = keys[0:func_limit]
+            keys = keys[:func_limit]
 
         s3_paths = [
             (
@@ -77,15 +80,29 @@ class PipelineStep(ABC):
             for partition in keys
         ]
 
+        start_time = time.time()
         futures = function_executor.map(
             self._execute_step, s3_paths, extra_env=extra_env
         )
 
         results = function_executor.get_result(futures)
+        end_time = time.time()
 
-        # asociate futures worker_start_tstamp and worker_end_tstamp to the profiler via the profiler.worker_id and the futures position
+        # asociate futures worker_start_tstamp and worker_end_tstamp to the profiler via the profiler.worker_id and the futures position.
+        # this way we wrap around customized profiling with lithops own stats for each worker.
         for result in results:
             worker_id = result.worker_id
             result.worker_start_tstamp = futures[worker_id].stats["worker_start_tstamp"]
             result.worker_end_tstamp = futures[worker_id].stats["worker_end_tstamp"]
-        return results
+
+        # Create a Job object with the provided chunk_size, simplifies the pipeline process.
+        job = Job(
+            memory=runtime_memory,
+            chunk_size=chunk_size,
+            start_time=start_time,
+            end_time=end_time,
+            number_workers=len(results),
+            profilers=results,
+        )
+
+        return job

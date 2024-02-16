@@ -1,12 +1,11 @@
 import os
-from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.cm as cm
 import math
+import json
 from adjustText import adjust_text
-
-from profiling import JobCollection
+from collections import defaultdict
 
 
 def aggregate_and_plot(
@@ -707,8 +706,7 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
     colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
 
     for i, (chunk_size, data) in enumerate(data_for_plot.items()):
-        # Sorting the data based on runtime memory
-        sorted_data = sorted(data, key=lambda x: x[4])  # x[4] is the runtime memory
+        sorted_data = sorted(data, key=lambda x: x[4])
         times, costs, std_times, std_costs, memories, num_workers = zip(*sorted_data)
 
         plt.errorbar(
@@ -721,7 +719,7 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
             alpha=0.5,
             capsize=5,
         )
-        plt.plot(times, costs, color=colors[i], alpha=0.5)  # Connecting lines
+        plt.plot(times, costs, color=colors[i], alpha=0.5)
 
     all_data = [(d[0], d[1]) for data in data_for_plot.values() for d in data]
     all_times, all_costs = zip(*all_data)
@@ -756,7 +754,7 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
     adjust_text(texts, arrowprops=dict(arrowstyle="->", color="black", lw=0.5))
 
     plt.title(
-        f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB",
+        f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB without partitioning costs",
         fontsize=18,
     )
     plt.xlabel("Execution Time (seconds)", fontsize=16)
@@ -785,6 +783,152 @@ def plot_cost_vs_time_pareto_real(job_collection, save_dir, step_name, dataset_s
     plt.tight_layout()
 
     save_path = os.path.join(save_dir, f"pareto_analysis_{step_name}.png")
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Pareto plot saved to: {save_path}")
+
+
+def load_partitioning_times(results_file):
+    with open(results_file, "r") as file:
+        data = json.load(file)
+
+    partitioning_times = {}
+    partitions_data = data.get("8", {})
+
+    for num_partitions, results_list in partitions_data.items():
+        total_times = [
+            result["total_time"] for result in results_list if "total_time" in result
+        ]
+        if total_times:
+            partitioning_times[num_partitions] = np.mean(total_times)
+
+    return partitioning_times
+
+
+def plot_cost_vs_time_pareto_real_partition(
+    job_collection, save_dir, step_name, dataset_size, results_file
+):
+    cost_per_ms_per_mb = 0.0000000167
+    cost_per_second_partitioning = 9.44444444e-5
+    data_for_plot = defaultdict(list)
+    average_data = defaultdict(lambda: defaultdict(list))
+
+    partitioning_times = load_partitioning_times(results_file)
+
+    for step, job in job_collection:
+        if step == step_name:
+            runtime_mem, chunk_size = job.memory, job.chunk_size
+            num_workers = len(job.profilers)
+            partition_time = partitioning_times.get(str(num_workers), 0)
+            acc_cost = 0
+            for worker in job.profilers:
+                acc_cost += (
+                    (worker.worker_end_tstamp - worker.worker_start_tstamp)
+                    * 1000
+                    * cost_per_ms_per_mb
+                    * (runtime_mem / 1024)
+                )
+            partitioning_cost = partition_time * cost_per_second_partitioning
+            total_cost = acc_cost + partitioning_cost
+
+            job_key = (chunk_size, runtime_mem, num_workers)
+            total_time = job.end_time - job.start_time + partition_time
+            average_data[job_key]["times"].append(total_time)
+            average_data[job_key]["costs"].append(total_cost)
+
+    for key, values in average_data.items():
+        if values["times"] and values["costs"]:
+            avg_time = np.median(values["times"])
+            avg_cost = np.median(values["costs"])
+            std_time = np.std(values["times"])
+            std_cost = np.std(values["costs"])
+            data_for_plot[key[0]].append(
+                (avg_time, avg_cost, std_time, std_cost, key[1], key[2])
+            )
+
+    plt.figure(figsize=(15, 10))
+    if data_for_plot: 
+        colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
+        for i, (chunk_size, data) in enumerate(data_for_plot.items()):
+            sorted_data = sorted(data, key=lambda x: x[4])
+            times, costs, std_times, std_costs, memories, num_workers = zip(
+                *sorted_data
+            )
+
+            plt.errorbar(
+                times,
+                costs,
+                xerr=std_times,
+                yerr=std_costs,
+                fmt="o",
+                color=colors[i],
+                alpha=0.5,
+                capsize=5,
+            )
+            plt.plot(times, costs, color=colors[i], alpha=0.5)
+
+        all_data = [(d[0], d[1]) for data in data_for_plot.values() for d in data]
+        if all_data:  
+            all_times, all_costs = zip(*all_data)
+            pareto_front = is_pareto_efficient(np.vstack((all_times, all_costs)).T)
+            pareto_times = np.array(all_times)[pareto_front]
+            pareto_costs = np.array(all_costs)[pareto_front]
+
+            plt.scatter(
+                pareto_times,
+                pareto_costs,
+                color="red",
+                edgecolor="black",
+                label="Pareto Frontier",
+                zorder=3,
+            )
+
+        texts = []
+        for chunk_size, data in data_for_plot.items():
+            for time, cost, std_time, std_cost, mem, workers in data:
+                annotation_text = f"{mem} MB, {workers} workers"
+                texts.append(
+                    plt.text(
+                        time + 0.5,
+                        cost + (max(costs)*0.02),  
+                        annotation_text,
+                        ha="left",
+                        va="bottom",
+                        fontsize=12,
+                    )
+                )
+
+        adjust_text(texts, arrowprops=dict(arrowstyle="->", color="black", lw=0.5))
+
+        legend_elements = [plt.Line2D([0], [0], color=c, lw=4) for c in colors] + [
+            plt.Line2D([0], [0], marker='o', color='w', label='Pareto Frontier', markerfacecolor='red', markersize=10)]
+        plt.legend(legend_elements, [f"Chunk Size: {cs} MB" for cs in data_for_plot.keys()] + ["Pareto Frontier"], fontsize=14, loc='best')
+
+        plt.title(
+            f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB including partitioning costs",
+            fontsize=18,
+        )
+        plt.xlabel("Execution Time (seconds)", fontsize=16)
+        plt.ylabel("Cost", fontsize=16)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.grid(True)
+        plt.tight_layout()
+    else:
+        plt.text(
+            0.5,
+            0.5,
+            "No data available for plotting",
+            horizontalalignment="center",
+            verticalalignment="center",
+            fontsize=20,
+            color="red",
+        )
+
+    save_path = os.path.join(
+        save_dir, f"pareto_analysis_{step_name}_{dataset_size}MB.png"
+    )
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(save_path)
     plt.close()

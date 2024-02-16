@@ -60,12 +60,12 @@ def time_it(label, function, time_records, *args, **kwargs):
 
 
 @contextlib.contextmanager
-def profiling_context():
+def profiling_context(monitored_process_pid):
     parent_conn, child_conn = Pipe()
     profiler = Profiler()
-    parent_pid = os.getpid()
+
     monitoring_process = Process(
-        target=profiler.start_profiling, args=(child_conn, parent_pid)
+        target=profiler.start_profiling, args=(child_conn, monitored_process_pid)
     )
     monitoring_process.start()
 
@@ -142,8 +142,8 @@ class IMetricCollector:
 class CPUMetricCollector(IMetricCollector):
     def _collect(self, pid, timestamp, collection_id):
         try:
-            # cpu_usage = psutil.Process(pid).cpu_percent(interval=0.3)
-            cpu_usage = psutil.Process(pid).cpu_percent()
+
+            cpu_usage = psutil.Process(pid).cpu_percent(interval=0.01)
             return CPUMetric(
                 timestamp=timestamp,
                 pid=pid,
@@ -198,26 +198,6 @@ class NetworkMetricCollector(IMetricCollector):
         )
 
 
-class ProcessManager:
-    def __init__(self, parent_pid):
-        self.parent_pid = parent_pid
-
-    def __repr__(self):
-        return f"ProcessManager(parent_pid={self.parent_pid}) children: {self.get_processes_pids()}"
-
-    def get_processes_pids(self):
-        # Return all the children except the profiler process
-        processes = []
-        profiler_pid = os.getpid()
-
-        processes.append(self.parent_pid)
-        for p in psutil.Process(self.parent_pid).children(recursive=True):
-            if p.pid == profiler_pid:
-                continue
-            processes.append(p.pid)
-        return processes
-
-
 @dataclass
 class MetricCollector:
     def __init__(self):
@@ -267,12 +247,16 @@ class MetricCollector:
         return f"MetricCollector(cpu_metrics={self.cpu_metrics}, memory_metrics={self.memory_metrics}, disk_metrics={self.disk_metrics}, network_metrics={self.network_metrics})"
 
     def collect_all_metrics(self, parent_pid, index):
-        process_manager = ProcessManager(parent_pid)
-        print(f"Tracking process PIDs: {process_manager.get_processes_pids()}")
-        network_metric = self.network_collector.collect_metric(parent_pid, index)
-        if network_metric is not None:
-            self.network_metrics.append(network_metric)
-        for pid in process_manager.get_processes_pids():
+        current_process = psutil.Process(parent_pid)
+        children = current_process.children(recursive=True)
+
+        process_list = [current_process] + children
+
+        print(f"Tracking process PIDs: {[proc.pid for proc in process_list]}")
+
+        for proc in process_list:
+            pid = proc.pid
+            # These metrics are per process
             memory_metric = self.memory_collector.collect_metric(pid, index)
             if memory_metric is not None:
                 self.memory_metrics.append(memory_metric)
@@ -284,6 +268,12 @@ class MetricCollector:
             cpu_metric = self.cpu_collector.collect_metric(pid, index)
             if cpu_metric is not None:
                 self.cpu_metrics.append(cpu_metric)
+
+        # Network metrics are global, not per-process
+        network_metric = self.network_collector.collect_metric(pid, index)
+        if network_metric is not None:
+            self.network_metrics.append(network_metric)
+        time.sleep(1)
 
     def update(self, received_data):
         if not isinstance(received_data, MetricCollector):
@@ -350,11 +340,12 @@ class Profiler:
             f"Profiler(metrics={self.metrics}, function_timers={self.function_timers})"
         )
 
-    def start_profiling(self, conn, parent_pid):
+    def start_profiling(self, conn, monitored_process_pid):
         index = 0
         try:
-            while True:
-                self.metrics.collect_all_metrics(parent_pid, index)
+            # The while condition is a fallback, but it should always end with the stop signal.
+            while psutil.pid_exists(monitored_process_pid):
+                self.metrics.collect_all_metrics(monitored_process_pid, index)
                 index += 1
 
                 if conn.poll():
