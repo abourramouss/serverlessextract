@@ -336,9 +336,7 @@ class Profiler:
         return profiler
 
     def __repr__(self):
-        return (
-            f"Profiler(metrics={self.metrics}, function_timers={self.function_timers})"
-        )
+        return f"Profiler(worker_id={self.worker_id}, worker_start_tstamp={self.worker_start_tstamp}, worker_end_tstamp={self.worker_end_tstamp}, metrics={self.metrics}, function_timers={self.function_timers})"
 
     def start_profiling(self, conn, monitored_process_pid):
         index = 0
