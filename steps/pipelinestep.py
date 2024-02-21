@@ -1,13 +1,38 @@
 import lithops
 import pickle
 import time
+import os
+import requests
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
-from pprint import pprint
 from profiling import profiling_context
 from profiling import Job
-import os
+
+
+def detect_runtime_environment():
+    if "AWS_LAMBDA_FUNCTION_NAME" in os.environ:
+        return ("AWS Lambda", None)
+
+    try:
+        token_response = requests.put(
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+            timeout=1,
+        )
+        if token_response.status_code == 200:
+            token = token_response.text
+            response = requests.get(
+                "http://169.254.169.254/latest/meta-data/instance-type",
+                headers={"X-aws-ec2-metadata-token": token},
+                timeout=1,
+            )
+            if response.status_code == 200:
+                return ("Amazon EC2", response.text)
+    except requests.exceptions.RequestException:
+        pass
+
+    return ("Unknown", None)
 
 
 class PipelineStep(ABC):
@@ -52,12 +77,19 @@ class PipelineStep(ABC):
             function_timers = self.build_command(*command_args)
         profiler.function_timers = function_timers
         profiler.worker_id = id
-        return profiler
+
+        env, instance_type = detect_runtime_environment()
+
+        print(f"Worker {id} finished step" f" on {env} instance {instance_type}")
+        return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
     def run(
-        self, chunk_size: int, runtime_memory: int, func_limit: Optional[int] = None
+        self,
+        chunk_size: int,
+        runtime_memory: int,
+        cpus_per_worker: int,
+        func_limit: Optional[int] = None,
     ):
-
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(runtime_memory=runtime_memory)
         keys = lithops.Storage().list_keys(
@@ -88,21 +120,25 @@ class PipelineStep(ABC):
         results = function_executor.get_result(futures)
         end_time = time.time()
 
-        # asociate futures worker_start_tstamp and worker_end_tstamp to the profiler via the profiler.worker_id and the futures position.
-        # this way we wrap around customized profiling with lithops own stats for each worker.
-        for result in results:
-            worker_id = result.worker_id
-            result.worker_start_tstamp = futures[worker_id].stats["worker_start_tstamp"]
-            result.worker_end_tstamp = futures[worker_id].stats["worker_end_tstamp"]
+        env = results[0]["env"]
+        instance_type = results[0]["instance_type"]
+        profilers = [result["profiler"] for result in results]
 
-        # Create a Job object with the provided chunk_size, simplifies the pipeline process.
+        for result, future in zip(results, futures):
+            profiler = result["profiler"]
+            profiler.worker_start_tstamp = future.stats["worker_start_tstamp"]
+            profiler.worker_end_tstamp = future.stats["worker_end_tstamp"]
+
         job = Job(
             memory=runtime_memory,
+            cpus_per_worker=cpus_per_worker,
             chunk_size=chunk_size,
             start_time=start_time,
             end_time=end_time,
-            number_workers=len(results),
-            profilers=results,
+            number_workers=len(profilers),
+            profilers=profilers,
+            instance_type=instance_type,
+            environment=env,
         )
 
         return job
