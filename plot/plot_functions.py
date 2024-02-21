@@ -6,6 +6,7 @@ import math
 import json
 from adjustText import adjust_text
 from collections import defaultdict
+import requests
 
 
 def aggregate_and_plot(
@@ -129,6 +130,7 @@ def aggregate_and_plot(
     plt.close()
 
 
+# TODO: Redo the function.
 def average_and_plot(
     job_collection, save_dir, filename, specified_memory, specified_chunk_size
 ):
@@ -140,9 +142,7 @@ def average_and_plot(
         if job.memory == specified_memory and job.chunk_size == specified_chunk_size:
             for profiler in job.profilers:
                 profiler_count += 1
-                for (
-                    metric
-                ) in profiler.metrics:  # Assuming profiler has a 'metrics' attribute
+                for metric in profiler.metrics:
                     cid = metric.collection_id
                     if cid not in aggregated_metrics:
                         aggregated_metrics[cid] = {
@@ -168,34 +168,26 @@ def average_and_plot(
         return
 
     min_timestamp = min(min(ts) for ts in timestamps.values())
-    relative_times = [ts[0] - min_timestamp for ts in sorted(timestamps.values())]
+    relative_times = [
+        min(ts) - min_timestamp
+        for ts in sorted(timestamps.values(), key=lambda x: min(x))
+    ]
 
     cpu_usages = [metrics["cpu_usage"] for metrics in aggregated_metrics.values()]
     memory_usages = [metrics["memory_usage"] for metrics in aggregated_metrics.values()]
+
     disk_read_rates, disk_write_rates, net_read_rates, net_write_rates = [], [], [], []
 
-    sorted_cids = sorted(aggregated_metrics)
+    sorted_cids = sorted(aggregated_metrics, key=lambda cid: min(timestamps[cid]))
     for i, cid in enumerate(sorted_cids):
         if i == 0:
-            disk_read_rates.append(0)
-            disk_write_rates.append(0)
-            net_read_rates.append(0)
-            net_write_rates.append(0)
             continue
-
         prev_cid = sorted_cids[i - 1]
         time_diff = max(relative_times[i] - relative_times[i - 1], 1)
 
         for metric, rate_list in [
             ("disk_read_mb", disk_read_rates),
             ("disk_write_mb", disk_write_rates),
-        ]:
-            rate = (
-                aggregated_metrics[cid][metric] - aggregated_metrics[prev_cid][metric]
-            ) / time_diff
-            rate_list.append(max(rate, 0))
-
-        for metric, rate_list in [
             ("net_read_mb", net_read_rates),
             ("net_write_mb", net_write_rates),
         ]:
@@ -204,6 +196,7 @@ def average_and_plot(
             ) / time_diff
             rate_list.append(max(rate, 0))
 
+    adjusted_relative_times = relative_times[1:]
     plt.figure(figsize=(15, 10))
     plt.suptitle("Average Profiler Metrics Over Relative Duration", fontsize=20)
 
@@ -229,7 +222,7 @@ def average_and_plot(
         start=3,
     ):
         plt.subplot(3, 2, i)
-        plt.plot(relative_times, data, marker="o")
+        plt.plot(adjusted_relative_times, data, marker="o")
         plt.title(title)
         plt.xlabel("Time (s)")
         plt.ylabel(f"{title} (MB/s)")
@@ -848,7 +841,7 @@ def plot_cost_vs_time_pareto_real_partition(
             )
 
     plt.figure(figsize=(15, 10))
-    if data_for_plot: 
+    if data_for_plot:
         colors = plt.cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
         for i, (chunk_size, data) in enumerate(data_for_plot.items()):
             sorted_data = sorted(data, key=lambda x: x[4])
@@ -869,7 +862,7 @@ def plot_cost_vs_time_pareto_real_partition(
             plt.plot(times, costs, color=colors[i], alpha=0.5)
 
         all_data = [(d[0], d[1]) for data in data_for_plot.values() for d in data]
-        if all_data:  
+        if all_data:
             all_times, all_costs = zip(*all_data)
             pareto_front = is_pareto_efficient(np.vstack((all_times, all_costs)).T)
             pareto_times = np.array(all_times)[pareto_front]
@@ -891,7 +884,7 @@ def plot_cost_vs_time_pareto_real_partition(
                 texts.append(
                     plt.text(
                         time + 0.5,
-                        cost + (max(costs)*0.02),  
+                        cost + (max(costs) * 0.02),
                         annotation_text,
                         ha="left",
                         va="bottom",
@@ -902,8 +895,23 @@ def plot_cost_vs_time_pareto_real_partition(
         adjust_text(texts, arrowprops=dict(arrowstyle="->", color="black", lw=0.5))
 
         legend_elements = [plt.Line2D([0], [0], color=c, lw=4) for c in colors] + [
-            plt.Line2D([0], [0], marker='o', color='w', label='Pareto Frontier', markerfacecolor='red', markersize=10)]
-        plt.legend(legend_elements, [f"Chunk Size: {cs} MB" for cs in data_for_plot.keys()] + ["Pareto Frontier"], fontsize=14, loc='best')
+            plt.Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                label="Pareto Frontier",
+                markerfacecolor="red",
+                markersize=10,
+            )
+        ]
+        plt.legend(
+            legend_elements,
+            [f"Chunk Size: {cs} MB" for cs in data_for_plot.keys()]
+            + ["Pareto Frontier"],
+            fontsize=14,
+            loc="best",
+        )
 
         plt.title(
             f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB including partitioning costs",
@@ -933,3 +941,155 @@ def plot_cost_vs_time_pareto_real_partition(
     plt.savefig(save_path)
     plt.close()
     print(f"Pareto plot saved to: {save_path}")
+
+
+def get_ec2_price(instance_type):
+    prices = {
+        "m5.large": 0.096,
+        "m5.xlarge": 0.192,
+        "m5.2xlarge": 0.384,
+        "m5.4xlarge": 0.768,
+        "m5.8xlarge": 1.536,
+        "m5.12xlarge": 2.304,
+        "m5.16xlarge": 3.072,
+        "m5.24xlarge": 4.608,
+        "m5.metal": 4.608,
+        "m5a.large": 0.086,
+        "m5a.xlarge": 0.172,
+        "m5a.2xlarge": 0.344,
+        "m5a.4xlarge": 0.688,
+        "m5a.8xlarge": 1.376,
+        "m5a.12xlarge": 2.064,
+        "m5a.16xlarge": 2.752,
+        "m5a.24xlarge": 4.128,
+        "m5ad.large": 0.103,
+        "m5ad.xlarge": 0.206,
+        "m5ad.2xlarge": 0.412,
+        "c7i.large": 0.08925,
+        "c7i.xlarge": 0.1785,
+        "c7i.2xlarge": 0.357,
+        "c7i.4xlarge": 0.714,
+        "c7i.8xlarge": 1.428,
+        "c7i.12xlarge": 2.142,
+        "c7i.16xlarge": 2.856,
+        "c7i.24xlarge": 4.284,
+        "c7i.48xlarge": 8.568,
+        "c7i.metal-24xl": 4.284,
+        "c7i.metal-48xl": 8.568,
+        "m7i.xlarge": 0.2016,
+    }
+
+    return prices.get(instance_type, None)
+
+
+def plot_cost_vs_time_pareto_real_ec2(
+    job_collection, save_dir, step_name, dataset_size
+):
+    data_for_plot = defaultdict(list)
+    average_data = defaultdict(lambda: defaultdict(list))
+
+    # Data Aggregation
+    for step, job in job_collection:
+        if step != step_name:
+            continue
+        instance_type = job.instance_type
+        price_per_hour = get_ec2_price(instance_type)
+        if price_per_hour is None:
+            print(f"Price not found for instance type {instance_type}.")
+            continue
+        price_per_second = price_per_hour / 3600
+
+        acc_cost = sum(
+            (worker.worker_end_tstamp - worker.worker_start_tstamp) * price_per_second
+            for worker in job.profilers
+        )
+        total_time = job.end_time - job.start_time
+        job_key = (
+            job.chunk_size,
+            job.cpus_per_worker,
+            job.instance_type,
+        )  # Adjusted to include cpus_per_worker
+        average_data[job_key]["times"].append(total_time)
+        average_data[job_key]["costs"].append(acc_cost)
+
+    # Calculate average times and costs for plotting
+    for key, values in average_data.items():
+        if not values["times"] or not values["costs"]:
+            continue
+        avg_time = np.median(values["times"])
+        avg_cost = np.median(values["costs"])
+        std_time = np.std(values["times"])
+        std_cost = np.std(values["costs"])
+        data_for_plot[key[0]].append((avg_time, avg_cost, std_time, std_cost) + key[1:])
+
+    # Plotting
+    plt.figure(figsize=(15, 10))
+    if data_for_plot:
+        plot_data(data_for_plot)
+
+    plt.title(
+        f"Pareto Analysis: Cost vs Execution Time for {step_name}, Dataset Size {dataset_size} MB",
+        fontsize=18,
+    )
+    plt.xlabel("Execution Time (seconds)", fontsize=16)
+    plt.ylabel("Cost ($)", fontsize=16)
+    plt.legend(loc="best", fontsize=14)
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Save Plot
+    save_path = os.path.join(
+        save_dir, f"pareto_analysis_{step_name}_{dataset_size}MB.png"
+    )
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Pareto plot saved to: {save_path}")
+
+
+def plot_data(data_for_plot):
+    colors = cm.rainbow(np.linspace(0, 1, len(data_for_plot)))
+    for i, (chunk_size, data) in enumerate(data_for_plot.items()):
+        sorted_data = sorted(data, key=lambda x: x[0])  # Sort by execution time
+        times, costs, std_times, std_costs, cpus_per_worker, instance_types = zip(
+            *sorted_data
+        )
+        color = colors[i]
+        plt.errorbar(
+            times,
+            costs,
+            xerr=std_times,
+            yerr=std_costs,
+            fmt="o",
+            color=color,
+            ecolor=color,
+            elinewidth=1.5,
+            capsize=3,
+            alpha=0.6,
+        )
+        plt.plot(
+            times,
+            costs,
+            color=color,
+            alpha=0.7,
+            marker="o",
+            linestyle="-",
+            label=f"Chunk size: {chunk_size}",
+        )
+
+        # Annotation for each point
+        for time, cost, _, _, cpus, instance_type in sorted_data:
+            plt.text(time, cost, f"{cpus} vCPUs, {instance_type}", fontsize=9)
+
+    # Pareto Frontier
+    all_data = np.array([(d[0], d[1]) for data in data_for_plot.values() for d in data])
+    pareto_front = is_pareto_efficient(all_data)
+    pareto_times, pareto_costs = all_data[pareto_front].T
+    plt.scatter(
+        pareto_times,
+        pareto_costs,
+        color="red",
+        edgecolor="black",
+        label="Pareto Frontier",
+        zorder=3,
+    )
