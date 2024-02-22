@@ -7,45 +7,6 @@ import json
 from dataclasses import dataclass, asdict, fields
 
 
-@dataclass
-class BaseMetric:
-    timestamp: float
-
-    def __lt__(self, other):
-        if not isinstance(other, BaseMetric):
-            return NotImplemented
-        return self.timestamp < other.timestamp
-
-    def __add__(self, other):
-        if not isinstance(other, type(self)):
-            raise TypeError(
-                f"Cannot add different metric types: {type(self).__name__} and {type(other).__name__}"
-            )
-        new_data = {
-            field.name: (getattr(self, field.name) + getattr(other, field.name)) / 2
-            for field in fields(self)
-        }
-        return self.__class__(**new_data)
-
-    def __truediv__(self, number):
-        if not isinstance(number, (int, float)):
-            return NotImplemented
-        new_data = {
-            field.name: getattr(self, field.name) / number for field in fields(self)
-        }
-        return self.__class__(**new_data)
-
-    def to_dict(self):
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({', '.join(f'{field.name}={getattr(self, field.name)}' for field in fields(self))})"
-
-
 def time_it(label, function, time_records, *args, **kwargs):
     print(f"label: {label}, type of function: {type(function)}")
 
@@ -99,6 +60,96 @@ class FunctionTimer:
 
     def __repr__(self) -> str:
         return f"FunctionTimer(label={self.label}, start_time={self.start_time}, end_time={self.end_time}, duration={self.duration})"
+
+
+@dataclass
+class BaseMetric:
+    timestamp: float
+
+    def __lt__(self, other):
+        if not isinstance(other, BaseMetric):
+            return NotImplemented
+        return self.timestamp < other.timestamp
+
+    def __add__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                f"Cannot add different metric types: {type(self).__name__} and {type(other).__name__}"
+            )
+
+        new_data = {
+            "timestamp": (self.timestamp + other.timestamp) / 2,
+        }
+
+        if hasattr(self, "collection_id"):
+            new_data["collection_id"] = self.collection_id
+
+        if hasattr(self, "pid"):
+            new_data["pid"] = 0
+
+        # Handle summing or retaining of specific metric fields
+        for field in fields(self):
+            if field.name not in new_data:
+                if field.name in [
+                    "cpu_usage",
+                    "memory_usage",
+                    "disk_read_mb",
+                    "disk_write_mb",
+                    "net_read_mb",
+                    "net_write_mb",
+                ]:
+                    field_value = getattr(self, field.name) + getattr(other, field.name)
+                    new_data[field.name] = field_value
+
+        return self.__class__(**new_data)
+
+    def __sub__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                f"Cannot subtract different metric types: {type(self).__name__} and {type(other).__name__}"
+            )
+
+        new_data = {"timestamp": max(self.timestamp, other.timestamp)}
+
+        if hasattr(self, "collection_id"):
+            new_data["collection_id"] = self.collection_id
+
+        if hasattr(self, "pid"):
+            new_data["pid"] = 0
+
+        for field in fields(self):
+            if field.name not in new_data:
+                if field.name in [
+                    "cpu_usage",
+                    "memory_usage",
+                    "disk_read_mb",
+                    "disk_write_mb",
+                    "net_read_mb",
+                    "net_write_mb",
+                ]:
+
+                    field_value = getattr(self, field.name) - getattr(other, field.name)
+                    new_data[field.name] = field_value
+
+        return self.__class__(**new_data)
+
+    def __truediv__(self, number):
+        if not isinstance(number, (int, float)):
+            return NotImplemented
+        new_data = {
+            field.name: getattr(self, field.name) / number for field in fields(self)
+        }
+        return self.__class__(**new_data)
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(f'{field.name}={getattr(self, field.name)}' for field in fields(self))})"
 
 
 @dataclass
@@ -218,13 +269,13 @@ class MetricCollector:
 
     def __iter__(self):
         for metric in self.cpu_metrics:
-            yield metric
+            yield ("cpu", metric)
         for metric in self.memory_metrics:
-            yield metric
+            yield ("memory", metric)
         for metric in self.disk_metrics:
-            yield metric
+            yield ("disk", metric)
         for metric in self.network_metrics:
-            yield metric
+            yield ("network", metric)
 
     @classmethod
     def from_dict(cls, data):
