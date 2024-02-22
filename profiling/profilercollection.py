@@ -56,6 +56,9 @@ class Step:
         self.step_name = step_name
         self.jobs = []
 
+    def __iter__(self):
+        return iter(self.jobs)
+
     def add_job(
         self,
         chunk_size: int,
@@ -110,6 +113,9 @@ class Step:
 class JobCollection:
     def __init__(self):
         self.steps = {}  # Dict[str, Step]
+
+    def __getitem__(self, step_name):
+        return self.steps[step_name]
 
     def __len__(self):
         return sum(len(step.jobs) for step in self.steps.values())
