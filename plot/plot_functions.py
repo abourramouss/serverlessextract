@@ -6,7 +6,8 @@ import math
 import json
 from adjustText import adjust_text
 from collections import defaultdict
-import requests
+
+from profiling import JobCollection, Job
 
 
 def aggregate_and_plot(
@@ -131,10 +132,59 @@ def aggregate_and_plot(
 
 
 # TODO: Redo the function.
-def average_and_plot(
-    job_collection, save_dir, filename, specified_memory, specified_chunk_size
-):
+def average_and_plot(step_name: str, job_collection: JobCollection, job_filter: Job):
+    matching_jobs = []
     aggregated_metrics = {}
+    step_jobs = job_collection[step_name]
+    for job in step_jobs:
+        if (
+            job.environment == job_filter.environment
+            and job.instance_type == job_filter.instance_type
+        ):
+            if (
+                job.memory == job_filter.memory
+                and job.chunk_size == job_filter.chunk_size
+            ):
+                print(f"Found matching job: {job.environment} {job.instance_type}")
+                matching_jobs.append(job)
+
+    # Once matching jobs are found, we start with the aggregation of the metrics.
+    for job in matching_jobs:
+        for profiler in job.profilers:
+            for metric_type, metric in profiler.metrics:
+                # Aggregate the metrics by metric type and cid (if same cid and different pids, they will still be aggregated)
+                if metric_type not in aggregated_metrics:
+                    aggregated_metrics[metric_type] = {}
+                if metric.collection_id not in aggregated_metrics[metric_type]:
+                    aggregated_metrics[metric_type][metric.collection_id] = metric
+                else:
+                    # This aggregates metrics by cid (the result are system-wide metrics instead of per-process and aggregated for all jobs/workers)
+                    aggregated_metrics[metric_type][metric.collection_id] += metric
+
+    # Once the metrics are aggregated, we can average them
+    averaged_metrics = {}
+    for metric_type, metrics in aggregated_metrics.items():
+        for cid, metric in metrics.items():
+            if metric_type not in averaged_metrics:
+                averaged_metrics[metric_type] = {}
+            averaged_metrics[metric_type][cid] = metric / len(matching_jobs)
+
+    # Compute the rate for network net_write_mb and net_read_mb and disk disk_write_mb and disk_read_mb
+    for metric_type, metrics in aggregated_metrics.items():
+        for cid, metric in metrics.items():
+            if metric_type in ["disk", "network"]:
+                prev_cid = cid - 1
+                if prev_cid in metrics:
+                    time_diff = metric.timestamp - metrics[prev_cid].timestamp
+                    rate = (metric - metrics[prev_cid]) / time_diff
+                    averaged_metrics[metric_type][cid] = rate
+
+    print(averaged_metrics["cpu"])
+    # Plot the metrics
+
+
+"""
+aggregated_metrics = {}
     timestamps = {}
     profiler_count = 0
 
@@ -232,6 +282,8 @@ def average_and_plot(
     plt.savefig(os.path.join(save_dir, filename))
     plt.close()
     print(f"Plot saved to: {os.path.join(save_dir, filename)}")
+
+"""
 
 
 def plot_gantt(
@@ -977,6 +1029,7 @@ def get_ec2_price(instance_type):
         "c7i.metal-24xl": 4.284,
         "c7i.metal-48xl": 8.568,
         "m7i.xlarge": 0.2016,
+        "r7i.large": 0.1323,
     }
 
     return prices.get(instance_type, None)
