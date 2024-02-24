@@ -7,45 +7,6 @@ import json
 from dataclasses import dataclass, asdict, fields
 
 
-@dataclass
-class BaseMetric:
-    timestamp: float
-
-    def __lt__(self, other):
-        if not isinstance(other, BaseMetric):
-            return NotImplemented
-        return self.timestamp < other.timestamp
-
-    def __add__(self, other):
-        if not isinstance(other, type(self)):
-            raise TypeError(
-                f"Cannot add different metric types: {type(self).__name__} and {type(other).__name__}"
-            )
-        new_data = {
-            field.name: (getattr(self, field.name) + getattr(other, field.name)) / 2
-            for field in fields(self)
-        }
-        return self.__class__(**new_data)
-
-    def __truediv__(self, number):
-        if not isinstance(number, (int, float)):
-            return NotImplemented
-        new_data = {
-            field.name: getattr(self, field.name) / number for field in fields(self)
-        }
-        return self.__class__(**new_data)
-
-    def to_dict(self):
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({', '.join(f'{field.name}={getattr(self, field.name)}' for field in fields(self))})"
-
-
 def time_it(label, function, time_records, *args, **kwargs):
     print(f"label: {label}, type of function: {type(function)}")
 
@@ -102,6 +63,104 @@ class FunctionTimer:
 
 
 @dataclass
+class BaseMetric:
+    timestamp: float
+
+    def __lt__(self, other):
+        if not isinstance(other, BaseMetric):
+            return NotImplemented
+        return self.timestamp < other.timestamp
+
+    def __add__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                f"Cannot add different metric types: {type(self).__name__} and {type(other).__name__}"
+            )
+
+        new_data = {"timestamp": 0}
+
+        if hasattr(self, "collection_id"):
+            new_data["collection_id"] = self.collection_id
+
+        if hasattr(self, "pid"):
+            new_data["pid"] = 0
+
+        # Handle summing or retaining of specific metric fields
+        for field in fields(self):
+            if field.name not in new_data:
+                if field.name in [
+                    "cpu_usage",
+                    "memory_usage",
+                    "disk_read_mb",
+                    "disk_write_mb",
+                    "net_read_mb",
+                    "net_write_mb",
+                ]:
+                    field_value = getattr(self, field.name) + getattr(other, field.name)
+                    new_data[field.name] = field_value
+
+        return self.__class__(**new_data)
+
+    def __sub__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                f"Cannot subtract different metric types: {type(self).__name__} and {type(other).__name__}"
+            )
+
+        new_data = {"timestamp": 0}
+
+        if hasattr(self, "collection_id"):
+            new_data["collection_id"] = self.collection_id
+
+        if hasattr(self, "pid"):
+            new_data["pid"] = 0
+
+        for field in fields(self):
+            if field.name not in new_data:
+                if field.name in [
+                    "cpu_usage",
+                    "memory_usage",
+                    "disk_read_mb",
+                    "disk_write_mb",
+                    "net_read_mb",
+                    "net_write_mb",
+                ]:
+
+                    field_value = getattr(self, field.name) - getattr(other, field.name)
+                    new_data[field.name] = field_value
+
+        return self.__class__(**new_data)
+
+    def __truediv__(self, number):
+        if not isinstance(number, (int, float)):
+            return NotImplemented
+        for field in fields(self):
+            if field.name in [
+                "cpu_usage",
+                "memory_usage",
+                "disk_read_mb",
+                "disk_write_mb",
+                "net_read_mb",
+                "net_write_mb",
+            ]:
+
+                field_value = getattr(self, field.name) / number
+                setattr(self, field.name, field_value)
+
+        return self
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(f'{field.name}={getattr(self, field.name)}' for field in fields(self))})"
+
+
+@dataclass
 class CPUMetric(BaseMetric):
     collection_id: int
     pid: int
@@ -121,6 +180,8 @@ class DiskMetric(BaseMetric):
     pid: int
     disk_read_mb: float
     disk_write_mb: float
+    disk_read_rate: float
+    disk_write_rate: float
 
 
 @dataclass
@@ -128,6 +189,8 @@ class NetworkMetric(BaseMetric):
     collection_id: int
     net_read_mb: float
     net_write_mb: float
+    net_read_rate: float
+    net_write_rate: float
 
 
 class IMetricCollector:
@@ -218,13 +281,13 @@ class MetricCollector:
 
     def __iter__(self):
         for metric in self.cpu_metrics:
-            yield metric
+            yield ("cpu", metric)
         for metric in self.memory_metrics:
-            yield metric
+            yield ("memory", metric)
         for metric in self.disk_metrics:
-            yield metric
+            yield ("disk", metric)
         for metric in self.network_metrics:
-            yield metric
+            yield ("network", metric)
 
     @classmethod
     def from_dict(cls, data):
@@ -256,23 +319,84 @@ class MetricCollector:
 
         for proc in process_list:
             pid = proc.pid
-            # These metrics are per process
+
+            # Collect Memory Metrics
             memory_metric = self.memory_collector.collect_metric(pid, index)
             if memory_metric is not None:
                 self.memory_metrics.append(memory_metric)
 
-            disk_metric = self.disk_collector.collect_metric(pid, index)
-            if disk_metric is not None:
-                self.disk_metrics.append(disk_metric)
+            # Collect Disk Metrics
+            timestamp = time.time()
+            current_counter = psutil.Process(pid).io_counters()
+            disk_read_mb = current_counter.read_bytes / 1024.0**2
+            disk_write_mb = current_counter.write_bytes / 1024.0**2
 
+            if self.disk_metrics:  # Check for previous disk metric to calculate rate
+                prev_disk_metric = self.disk_metrics[-1]
+                time_diff = (
+                    timestamp - prev_disk_metric.timestamp
+                    if self.disk_metrics
+                    else None
+                )
+                disk_read_rate_mb = (
+                    (disk_read_mb - prev_disk_metric.disk_read_mb) / time_diff
+                    if time_diff
+                    else 0
+                )
+                disk_write_rate_mb = (
+                    (disk_write_mb - prev_disk_metric.disk_write_mb) / time_diff
+                    if time_diff
+                    else 0
+                )
+            else:
+                disk_read_rate_mb = disk_write_rate_mb = 0
+
+            disk_metric = DiskMetric(
+                timestamp=timestamp,
+                pid=pid,
+                disk_read_mb=disk_read_mb,
+                disk_write_mb=disk_write_mb,
+                disk_read_rate=disk_read_rate_mb,
+                disk_write_rate=disk_write_rate_mb,
+                collection_id=index,
+            )
+            self.disk_metrics.append(disk_metric)
+
+            # Collect CPU Metrics
             cpu_metric = self.cpu_collector.collect_metric(pid, index)
             if cpu_metric is not None:
                 self.cpu_metrics.append(cpu_metric)
 
-        # Network metrics are global, not per-process
-        network_metric = self.network_collector.collect_metric(pid, index)
-        if network_metric is not None:
-            self.network_metrics.append(network_metric)
+        # Collect Network Metrics, these are global
+        current_net_counters = psutil.net_io_counters(pernic=False)
+        net_read_mb = current_net_counters.bytes_recv / 1024.0**2
+        net_write_mb = current_net_counters.bytes_sent / 1024.0**2
+        if self.network_metrics:
+            prev_network_metric = self.network_metrics[-1]
+            time_diff = timestamp - prev_network_metric.timestamp
+            net_read_rate_mb = (
+                (net_read_mb - prev_network_metric.net_read_mb) / time_diff
+                if time_diff
+                else 0
+            )
+            net_write_rate_mb = (
+                (net_write_mb - prev_network_metric.net_write_mb) / time_diff
+                if time_diff
+                else 0
+            )
+        else:
+            net_read_rate_mb = net_write_rate_mb = 0
+
+        network_metric = NetworkMetric(
+            timestamp=timestamp,
+            net_read_mb=net_read_mb,
+            net_write_mb=net_write_mb,
+            net_read_rate=net_read_rate_mb,
+            net_write_rate=net_write_rate_mb,
+            collection_id=index,
+        )
+        self.network_metrics.append(network_metric)
+
         time.sleep(1)
 
     def update(self, received_data):
