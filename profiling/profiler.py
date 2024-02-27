@@ -180,8 +180,8 @@ class DiskMetric(BaseMetric):
     pid: int
     disk_read_mb: float
     disk_write_mb: float
-    disk_read_rate: float
-    disk_write_rate: float
+    # disk_read_rate: float
+    # disk_write_rate: float
 
 
 @dataclass
@@ -189,8 +189,8 @@ class NetworkMetric(BaseMetric):
     collection_id: int
     net_read_mb: float
     net_write_mb: float
-    net_read_rate: float
-    net_write_rate: float
+    # net_read_rate: float
+    # net_write_rate: float
 
 
 class IMetricCollector:
@@ -331,26 +331,31 @@ class MetricCollector:
             disk_read_mb = current_counter.read_bytes / 1024.0**2
             disk_write_mb = current_counter.write_bytes / 1024.0**2
 
-            if self.disk_metrics:  # Check for previous disk metric to calculate rate
-                prev_disk_metric = self.disk_metrics[-1]
-                time_diff = (
-                    timestamp - prev_disk_metric.timestamp
-                    if self.disk_metrics
-                    else None
-                )
-                disk_read_rate_mb = (
-                    (disk_read_mb - prev_disk_metric.disk_read_mb) / time_diff
-                    if time_diff
-                    else 0
-                )
-                disk_write_rate_mb = (
-                    (disk_write_mb - prev_disk_metric.disk_write_mb) / time_diff
-                    if time_diff
-                    else 0
-                )
-            else:
-                disk_read_rate_mb = disk_write_rate_mb = 0
+            # Initialize rates as zero
+            disk_read_rate_mb = 0
+            disk_write_rate_mb = 0
 
+            # Find the previous metric for the same PID, if it exists
+            prev_disk_metric = next(
+                (metric for metric in reversed(self.disk_metrics) if metric.pid == pid),
+                None,
+            )
+
+            if prev_disk_metric:
+                # Calculate time difference
+                time_diff = timestamp - prev_disk_metric.timestamp
+
+                # Ensure positive time difference
+                if time_diff > 0:
+                    # Calculate disk read and write rates
+                    disk_read_rate_mb = (
+                        disk_read_mb - prev_disk_metric.disk_read_mb
+                    ) / time_diff
+                    disk_write_rate_mb = (
+                        disk_write_mb - prev_disk_metric.disk_write_mb
+                    ) / time_diff
+
+            # Create and append the new disk metric
             disk_metric = DiskMetric(
                 timestamp=timestamp,
                 pid=pid,
