@@ -63,7 +63,7 @@ class RebinningStep(PipelineStep):
             time_records,
             params["flagrebin"]["aoflag.strategy"],
         )
-
+        print(f"ao flag path: {aoflag_path}")
         params["flagrebin"]["aoflag.strategy"] = aoflag_path
         param_path = dict_to_parset(params["flagrebin"])
 
@@ -86,7 +86,9 @@ class RebinningStep(PipelineStep):
         print("stdout:")
         print(stdout)
         print(stderr)
-        posix_source = time_it("zip", data_source.zip, time_records, PosixPath(msout))
+        posix_source = time_it(
+            "zip", data_source.zip_without_compression, time_records, PosixPath(msout)
+        )
         # Profile the upload_directory method
         time_it(
             "upload_rebinnedms",
