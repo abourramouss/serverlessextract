@@ -146,6 +146,7 @@ def average_and_plot(step_name: str, job_collection: JobCollection, job_filter: 
                 and job.chunk_size == job_filter.chunk_size
             ):
                 print(f"Found matching job: {job.environment} {job.instance_type}")
+                print(f"Job length {len(job.profilers)}")
                 matching_jobs.append(job)
 
     # Once matching jobs are found, we start with the aggregation of the metrics.
@@ -161,6 +162,10 @@ def average_and_plot(step_name: str, job_collection: JobCollection, job_filter: 
                     # This aggregates metrics by cid (the result are system-wide metrics instead of per-process and aggregated for all jobs/workers)
                     aggregated_metrics[metric_type][metric.collection_id] += metric
 
+    for metric_type, metrics in aggregated_metrics.items():
+        for cid, metric in metrics.items():
+            if metric_type == "cpu":
+                print(metric)
     # Once the metrics are aggregated, we can average them
     averaged_metrics = {}
     for metric_type, metrics in aggregated_metrics.items():
@@ -169,121 +174,18 @@ def average_and_plot(step_name: str, job_collection: JobCollection, job_filter: 
                 averaged_metrics[metric_type] = {}
             averaged_metrics[metric_type][cid] = metric / len(matching_jobs)
 
+    for metric_type, metrics in averaged_metrics.items():
+        for cid, metric in metrics.items():
+            if metric_type == "cpu":
+                print(metric)
     # Compute the rate for network net_write_mb and net_read_mb and disk disk_write_mb and disk_read_mb
     for metric_type, metrics in aggregated_metrics.items():
         for cid, metric in metrics.items():
             if metric_type in ["disk", "network"]:
-                prev_cid = cid - 1
-                if prev_cid in metrics:
-                    time_diff = metric.timestamp - metrics[prev_cid].timestamp
-                    rate = (metric - metrics[prev_cid]) / time_diff
+                if cid - 1 in metrics:
+                    time_diff = 1
+                    rate = (metric - metrics[cid - 1]) / time_diff
                     averaged_metrics[metric_type][cid] = rate
-
-    print(averaged_metrics["cpu"])
-    # Plot the metrics
-
-
-"""
-aggregated_metrics = {}
-    timestamps = {}
-    profiler_count = 0
-
-    for step_name, job in job_collection:
-        if job.memory == specified_memory and job.chunk_size == specified_chunk_size:
-            for profiler in job.profilers:
-                profiler_count += 1
-                for metric in profiler.metrics:
-                    cid = metric.collection_id
-                    if cid not in aggregated_metrics:
-                        aggregated_metrics[cid] = {
-                            "cpu_usage": 0,
-                            "memory_usage": 0,
-                            "disk_read_mb": 0,
-                            "disk_write_mb": 0,
-                            "net_read_mb": 0,
-                            "net_write_mb": 0,
-                        }
-                    timestamps.setdefault(cid, []).append(metric.timestamp)
-                    for key in aggregated_metrics[cid]:
-                        value = getattr(metric, key, 0)
-                        aggregated_metrics[cid][key] += value
-
-    if profiler_count > 1:
-        for cid in aggregated_metrics:
-            for key in aggregated_metrics[cid]:
-                aggregated_metrics[cid][key] /= profiler_count
-
-    if not aggregated_metrics:
-        print("No matching data found for the specified memory and chunk size.")
-        return
-
-    min_timestamp = min(min(ts) for ts in timestamps.values())
-    relative_times = [
-        min(ts) - min_timestamp
-        for ts in sorted(timestamps.values(), key=lambda x: min(x))
-    ]
-
-    cpu_usages = [metrics["cpu_usage"] for metrics in aggregated_metrics.values()]
-    memory_usages = [metrics["memory_usage"] for metrics in aggregated_metrics.values()]
-
-    disk_read_rates, disk_write_rates, net_read_rates, net_write_rates = [], [], [], []
-
-    sorted_cids = sorted(aggregated_metrics, key=lambda cid: min(timestamps[cid]))
-    for i, cid in enumerate(sorted_cids):
-        if i == 0:
-            continue
-        prev_cid = sorted_cids[i - 1]
-        time_diff = max(relative_times[i] - relative_times[i - 1], 1)
-
-        for metric, rate_list in [
-            ("disk_read_mb", disk_read_rates),
-            ("disk_write_mb", disk_write_rates),
-            ("net_read_mb", net_read_rates),
-            ("net_write_mb", net_write_rates),
-        ]:
-            rate = (
-                aggregated_metrics[cid][metric] - aggregated_metrics[prev_cid][metric]
-            ) / time_diff
-            rate_list.append(max(rate, 0))
-
-    adjusted_relative_times = relative_times[1:]
-    plt.figure(figsize=(15, 10))
-    plt.suptitle("Average Profiler Metrics Over Relative Duration", fontsize=20)
-
-    plt.subplot(3, 2, 1)
-    plt.plot(relative_times, cpu_usages, marker="o")
-    plt.title("Average CPU Usage")
-    plt.xlabel("Time (s)")
-    plt.ylabel("CPU Usage (%)")
-
-    plt.subplot(3, 2, 2)
-    plt.plot(relative_times, memory_usages, marker="o")
-    plt.title("Average Memory Usage")
-    plt.xlabel("Time (s)")
-    plt.ylabel("Memory Usage (MB)")
-
-    for i, (title, data) in enumerate(
-        [
-            ("Average Disk Read Rate", disk_read_rates),
-            ("Average Disk Write Rate", disk_write_rates),
-            ("Average Network Read Rate", net_read_rates),
-            ("Average Network Write Rate", net_write_rates),
-        ],
-        start=3,
-    ):
-        plt.subplot(3, 2, i)
-        plt.plot(adjusted_relative_times, data, marker="o")
-        plt.title(title)
-        plt.xlabel("Time (s)")
-        plt.ylabel(f"{title} (MB/s)")
-
-    plt.tight_layout()
-    os.makedirs(save_dir, exist_ok=True)
-    plt.savefig(os.path.join(save_dir, filename))
-    plt.close()
-    print(f"Plot saved to: {os.path.join(save_dir, filename)}")
-
-"""
 
 
 def plot_gantt(
@@ -1146,3 +1048,66 @@ def plot_data(data_for_plot):
         label="Pareto Frontier",
         zorder=3,
     )
+
+
+def plot_avg_execution_time_per_instance(
+    job_collection, save_dir, step_name, dataset_size
+):
+    exec_time_data = defaultdict(list)
+
+    # Data Aggregation
+    for step, job in job_collection:
+        if step != step_name:
+            continue
+        instance_type = job.instance_type
+        total_time = job.end_time - job.start_time
+        exec_time_data[instance_type].append(total_time)
+
+    # Calculate average execution times and standard deviation for each instance type
+    avg_times_std = [
+        (instance_type, np.mean(times), np.std(times))
+        for instance_type, times in exec_time_data.items()
+    ]
+
+    # Sort by average execution time
+    avg_times_std.sort(key=lambda x: x[1])
+
+    # Extract sorted data for plotting
+    instance_types, avg_times, std_times = zip(*avg_times_std)
+
+    # Plotting - More compressed figure size and adjusted font sizes
+    plt.figure(figsize=(8, 6))  # Smaller figure size for ACM paper format
+    y_pos = np.arange(len(instance_types))
+    bars = plt.bar(
+        y_pos, avg_times, yerr=std_times, align="center", alpha=0.7, capsize=5
+    )
+    plt.xticks(y_pos, instance_types, rotation=45, fontsize=10)
+    plt.ylabel("Avg. Exec Time (s)", fontsize=12)
+    plt.xlabel("Instance Type", fontsize=12)
+
+    title = f"{step_name}, {dataset_size}MB"
+    plt.title(title, fontsize=14, pad=10)
+    plt.tight_layout()
+
+    # Annotate each bar with the average execution time, carefully placed
+    for bar, avg_time, std_dev in zip(bars, avg_times, std_times):
+        annotation_y_position = (
+            bar.get_height() + std_dev
+        )  # Adjusting based on error bar
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            annotation_y_position,
+            f"{avg_time:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+        )
+
+    # Save Plot
+    save_path = os.path.join(
+        save_dir, f"avg_exec_time_acm_{step_name}_{dataset_size}.png"
+    )
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_path, bbox_inches="tight")
+    plt.close()
+    print(f"Plot saved to: {save_path}")

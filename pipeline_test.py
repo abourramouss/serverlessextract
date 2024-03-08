@@ -3,7 +3,7 @@ from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
 from steps.imaging import imaging, monitor_and_run_imaging
 from s3path import S3Path
-from profiling import JobCollection
+from profiling import JobCollection, Job
 from lithops import Storage
 from plot import (
     aggregate_and_plot,
@@ -16,6 +16,7 @@ from plot import (
     plot_memory_speedup_from_collection,
     plot_cost_vs_time_pareto_real_partition,
     plot_cost_vs_time_pareto_real_ec2,
+    plot_avg_execution_time_per_instance,
 )
 
 
@@ -123,59 +124,21 @@ file_path = "profilers.json"
 collection = JobCollection().load_from_file(file_path)
 
 
-runtime_memories = [
-    # 1000,
-    # 3538,
-    # 5308,
-    # 7076,
-    4000,
-]
-
-cpus_per_worker = 2
+mem = 17179
+chunk_size = 7603
 storage = Storage()
 
-for path in input_data_paths:
-    for mem in runtime_memories:
-        parameters["RebinningStep"]["input_data_path"] = S3Path(path)
-        chunk_size = storage.head_object(
-            parameters["RebinningStep"]["input_data_path"].bucket,
-            f"{parameters['RebinningStep']['input_data_path'].key}/partition_0.ms.zip",
-        )
-        chunk_size = int(chunk_size["content-length"]) // MB
-        print("Chunk size:", chunk_size)
-        print("Runtime memory", mem)
-
-        collection = JobCollection().load_from_file(file_path)
-
-        start_time = time.time()
-        finished_job = RebinningStep(
-            input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
-            parameters=parameters["RebinningStep"]["parameters"],
-            output=parameters["RebinningStep"]["output"],
-        ).run(
-            chunk_size=chunk_size, runtime_memory=mem, cpus_per_worker=cpus_per_worker
-        )
-        end_time = time.time()
-
-        print(f"Rebinning took {end_time-start_time} seconds")
-
-        print(f"Finished job instance type {finished_job.instance_type}")
-        collection.add_job(RebinningStep.__name__, finished_job)
-        collection.save_to_file(file_path)
-        plot_cost_vs_time_from_collection(collection, "rebinning/cost_vs_time")
-
-        plot_gantt(
-            collection,
-            f"rebinning_m7i/gantt/chunk_size{chunk_size}",
-            f"rebinning_gantt_runtime_{mem}.png",
-            mem,
-            chunk_size,
-        )
-
-
-plot_cost_vs_time_pareto_real_ec2(
-    collection,
-    "rebinning_m7i/cost_vs_time_pareto_real_partition",
-    "RebinningStep",
-    7603,
+# Create dummy Job
+job = Job(
+    memory=mem,
+    cpus_per_worker=8,
+    chunk_size=chunk_size,
+    start_time=time.time(),
+    end_time=time.time() + 1000,
+    profilers=[],
+    instance_type="c7i.2xlarge",
+    environment="Amazon EC2",
+    number_workers=1,
 )
+
+plot_avg_execution_time_per_instance(collection, "RebinningStep", "RebinningStep", 7900)
