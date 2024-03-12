@@ -1,124 +1,73 @@
 # Python 3.10
 FROM python:3.10-slim-buster
 
-RUN apt-get update && apt-get install -y \
-	zip redis-server curl \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+# Set environment variables to reduce image size and keep Python output unbuffered
+ENV PYTHONUNBUFFERED=TRUE \
+    OPENBLAS_NUM_THREADS=1 \
+    APP_HOME=/lithops \
+    DEBIAN_FRONTEND=noninteractive
 
-RUN pip install --upgrade setuptools six pip \
-	&& pip install --no-cache-dir \
-	flask \
-	pika \
-	boto3 \
-	ibm-cloud-sdk-core \
-	ibm-cos-sdk \
-	redis \
-	gevent \
-	requests \
-	PyYAML \
-	kubernetes \
-	numpy \
-	cloudpickle \
-	ps-mem \
-	tblib \
-	matplotlib \
-	psutil \
-	scipy \
-
-	RUN apt-get update \
-	# Install necessary dependencies
-	&& apt-get install -y \
-	g++ \
-	libboost-all-dev \
-	libhdf5-serial-dev \
-	libfftw3-dev \
-	libcfitsio-dev \
-	libarmadillo-dev \
-	liblog4cplus-dev \
-	libopenblas-dev \
-	liblapack-dev \
-	git \
-	wcslib-dev \
-	casacore-dev \
-	casacore-tools \
-	libpython3-dev \
-	libgsl-dev \
-	liblua5.3-dev \
-	libpng-dev \
-	libgtkmm-3.0-dev \
-	ninja-build \
-	pkg-config \
-	swig \
-	wget \
-	unzip \
-	flex \
-	bison \
-	ninja-build \
-	# Cleanup package lists
-	&& rm -rf /var/lib/apt/lists/*
-
-
-RUN apt-get update && apt-get install -y make && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y make libssl-dev && rm -rf /var/lib/apt/lists/*
-
-
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1.tar.gz \
-	&& tar -xzvf cmake-3.21.1.tar.gz \
-	&& cd cmake-3.21.1 \
-	&& ./bootstrap && make -j8 && make install \
-	&& cd / && rm -rf cmake-3.21.1.tar.gz cmake-3.21.1
-
-ENV OPENBLAS_NUM_THREADS=1 
-
-
-# Install AOFlagger from source
-RUN git clone https://gitlab.com/aroffringa/aoflagger.git /AOFlagger \
-	&& cd /AOFlagger \
-	&& mkdir build && cd build \
-	&& cmake .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /AOFlagger
-
-# Install EveryBeam
-RUN git clone https://git.astron.nl/RD/EveryBeam.git /EveryBeam \
-	&& cd /EveryBeam \
-	&& mkdir build && cd build \
-	&& cmake .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /EveryBeam
-
-# Install WSClean
-RUN git clone --recursive -j8  https://gitlab.com/aroffringa/wsclean.git /wsclean \
-	&& cd /wsclean \
-	&& mkdir build && cd build \
-	&& cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=/usr \
-	-DUSE_OPENMP=ON -DBUILD_GUI=OFF .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /wsclean
-
-# Install DP3
-RUN git clone https://github.com/lofar-astron/DP3.git /DP3 \
-	&& cd /DP3 \
-	&& mkdir build && cd build \
-	&& cmake .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /DP3
-
-
-# Set environment variable to keep Python output unbuffered
-ENV PYTHONUNBUFFERED TRUE
-
-# Copy Lithops proxy and lib to the container image.
-ENV APP_HOME /lithops
 WORKDIR $APP_HOME
 
+# Install system dependencies in a single RUN command to reduce layers
+# Minimize the number of packages to what is absolutely necessary
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    zip \
+    curl \
+    g++ \
+    libboost-all-dev \
+    libhdf5-serial-dev \
+    libfftw3-dev \
+    libcfitsio-dev \
+    libarmadillo-dev \
+    liblog4cplus-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    git \
+    wcslib-dev \
+    casacore-dev \
+    casacore-tools \
+    libpython3-dev \
+    libgsl-dev \
+    liblua5.3-dev \
+    libpng-dev \
+    ninja-build \
+    pkg-config \
+    swig \
+    wget \
+    unzip \
+    flex \
+    bison \
+    make \
+    libssl-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    # Install Python packages with no-cache to reduce image size
+    && pip install --no-cache-dir --upgrade setuptools six pip \
+    && pip install --no-cache-dir flask pika boto3 ibm-cloud-sdk-core ibm-cos-sdk redis gevent requests PyYAML kubernetes numpy cloudpickle ps-mem tblib matplotlib psutil scipy wrapt \
+    # Install CMake from binary instead of building from source to save time
+    && wget -qO- "https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1-Linux-x86_64.tar.gz" | tar --strip-components=1 -xz -C /usr/local
+
+# Consolidate source installations into as few RUN commands as possible
+# Clone and install AOFlagger, EveryBeam, WSClean, and DP3 in one layer
+RUN git clone https://gitlab.com/aroffringa/aoflagger.git /AOFlagger && \
+    mkdir /AOFlagger/build && cd /AOFlagger/build && \
+    cmake .. && make -j$(nproc) && make install && \
+    cd / && rm -rf /AOFlagger && \
+    git clone https://git.astron.nl/RD/EveryBeam.git /EveryBeam && \
+    mkdir /EveryBeam/build && cd /EveryBeam/build && \
+    cmake .. && make -j$(nproc) && make install && \
+    cd / && rm -rf /EveryBeam && \
+    git clone --recursive -j8 https://gitlab.com/aroffringa/wsclean.git /wsclean && \
+    mkdir /wsclean/build && cd /wsclean/build && \
+    cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=/usr -DUSE_OPENMP=ON -DBUILD_GUI=OFF .. && \
+    make -j$(nproc) && make install && \
+    cd / && rm -rf /wsclean && \
+    git clone https://github.com/lofar-astron/DP3.git /DP3 && \
+    mkdir /DP3/build && cd /DP3/build && \
+    cmake .. && make -j$(nproc) && make install && \
+    cd / && rm -rf /DP3
+
+# Copy Lithops proxy and lib to the container image and unpack
 COPY lithops_k8s.zip .
 RUN unzip lithops_k8s.zip && rm lithops_k8s.zip
-
-

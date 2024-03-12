@@ -65,7 +65,6 @@ class DataSource(ABC):
         # Execute the unzip command
         subprocess.run(["unzip", "-q", str(ms), "-d", str(extract_path)], check=True)
 
-        # Determine the new main directory, similar to your original logic
         zip_file = zipfile.ZipFile(ms)
         root_items = {item.split("/")[0] for item in zip_file.namelist()}
         zip_file.close()  # Close the zip file as we only needed it for listing contents

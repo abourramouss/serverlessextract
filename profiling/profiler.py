@@ -93,6 +93,8 @@ class BaseMetric:
                     "memory_usage",
                     "disk_read_mb",
                     "disk_write_mb",
+                    "disk_read_rate",
+                    "disk_write_rate",
                     "net_read_mb",
                     "net_write_mb",
                 ]:
@@ -180,8 +182,8 @@ class DiskMetric(BaseMetric):
     pid: int
     disk_read_mb: float
     disk_write_mb: float
-    # disk_read_rate: float
-    # disk_write_rate: float
+    disk_read_rate: float
+    disk_write_rate: float
 
 
 @dataclass
@@ -189,8 +191,8 @@ class NetworkMetric(BaseMetric):
     collection_id: int
     net_read_mb: float
     net_write_mb: float
-    # net_read_rate: float
-    # net_write_rate: float
+    net_read_rate: float
+    net_write_rate: float
 
 
 class IMetricCollector:
