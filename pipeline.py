@@ -1,7 +1,7 @@
 import time
 from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
-from steps.imaging import imaging, monitor_and_run_imaging
+from steps.imaging import ImagingStep
 from s3path import S3Path
 from profiling import JobCollection
 from lithops import Storage
@@ -23,7 +23,7 @@ MB = 1024 * 1024
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_61zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_1100MB_9zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -105,72 +105,117 @@ parameters = {
         "output": S3Path("/ayman-extract/extract-data/applycal_out/"),
     },
     "ImagingStep": {
-        "input_data_path": S3Path("/ayman-extract/extract-data/applycal_out/ms/"),
+        "input_data_path": S3Path("/ayman-extract/extract-data/applycal_out/"),
         "output_path": S3Path("/ayman-extract/extract-data/imaging_out/"),
     },
 }
 
 
-input_data_paths = [
-    # "/ayman-extract/partitions/partitions_1100MB_9zip/",
-    # "/ayman-extract/partitions/partitions_1100MB_4zip/",
-    # "/ayman-extract/partitions/partitions_1100MB_1zip/",
-    "/ayman-extract/partitions/partitions_8000MB_1zip/",
-]
-
 file_path = "profilers.json"
-
-collection = JobCollection().load_from_file(file_path)
-
-
-runtime_memories = [
-    # 1000,
-    # 3538,
-    # 5308,
-    # 7076,
-    4000,
-]
 
 cpus_per_worker = 2
 storage = Storage()
 
-for path in input_data_paths:
-    for mem in runtime_memories:
-        parameters["RebinningStep"]["input_data_path"] = S3Path(path)
-        chunk_size = storage.head_object(
-            parameters["RebinningStep"]["input_data_path"].bucket,
-            f"{parameters['RebinningStep']['input_data_path'].key}/partition_0.ms.zip",
-        )
-        chunk_size = int(chunk_size["content-length"]) // MB
-        print("Chunk size:", chunk_size)
-        print("Runtime memory", mem)
 
-        collection = JobCollection().load_from_file(file_path)
+mem = 4000
 
-        start_time = time.time()
-        finished_job = RebinningStep(
-            input_data_path=S3Path(parameters["RebinningStep"]["input_data_path"]),
-            parameters=parameters["RebinningStep"]["parameters"],
-            output=parameters["RebinningStep"]["output"],
-        ).run(
-            chunk_size=chunk_size, runtime_memory=mem, cpus_per_worker=cpus_per_worker
-        )
-        end_time = time.time()
+print(parameters["RebinningStep"]["input_data_path"])
+chunk_size = storage.head_object(
+    parameters["RebinningStep"]["input_data_path"].bucket,
+    f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
+)
+chunk_size = int(chunk_size["content-length"]) // MB
+print("Chunk size:", chunk_size)
+print("Runtime memory", mem)
 
-        print(f"Rebinning took {end_time-start_time} seconds")
+collection = JobCollection().load_from_file(file_path)
 
-        print(f"Finished job instance type {finished_job.instance_type}")
-        collection.add_job(RebinningStep.__name__, finished_job)
-        collection.save_to_file(file_path)
-        plot_cost_vs_time_from_collection(collection, "rebinning/cost_vs_time")
 
-        plot_gantt(
-            collection,
-            f"rebinning_m7i/gantt/chunk_size{chunk_size}",
-            f"rebinning_gantt_runtime_{mem}.png",
-            mem,
-            chunk_size,
-        )
+start_time = time.time()
+finished_job = RebinningStep(
+    input_data_path=parameters["RebinningStep"]["input_data_path"],
+    parameters=parameters["RebinningStep"]["parameters"],
+    output=parameters["RebinningStep"]["output"],
+).run(
+    chunk_size=chunk_size,
+    runtime_memory=mem,
+    cpus_per_worker=cpus_per_worker,
+    func_limit=1,
+)
+end_time = time.time()
+
+
+
+print(f"Rebinning took {end_time-start_time} seconds")
+
+
+start_time = time.time()
+
+finished_job = CalibrationStep(
+    input_data_path=parameters["CalibrationStep"]["input_data_path"],
+    parameters=parameters["CalibrationStep"]["parameters"],
+    output=parameters["CalibrationStep"]["output"],
+)
+
+end_time = time.time()
+
+print(f"Calibration took {end_time-start_time} seconds")
+
+
+start_time = time.time()
+finished_job = SubstractionStep(
+    input_data_path=parameters["SubstractionStep"]["input_data_path"],
+    parameters=parameters["SubstractionStep"]["parameters"],
+    output=parameters["SubstractionStep"]["output"],
+)
+
+
+end_time = time.time()
+
+print(f"Substraction took {end_time-start_time} seconds")
+
+start_time = time.time()
+finished_job = ApplyCalibrationStep(
+    input_data_path=parameters["ApplyCalibrationStep"]["input_data_path"],
+    parameters=parameters["ApplyCalibrationStep"]["parameters"],
+    output=parameters["ApplyCalibrationStep"]["output"],
+)
+
+end_time = time.time()
+
+print(f"ApplyCalibration took {end_time-start_time} seconds")
+
+
+start_time = time.time()
+
+finished_job = ImagingStep(
+    input_data_path=parameters["ImagingStep"]["input_data_path"],
+    parameters="",
+    output=parameters["ImagingStep"]["output_path"],
+).run(
+    chunk_size=chunk_size,
+    runtime_memory=10000,
+    cpus_per_worker=cpus_per_worker,
+    func_limit=1,
+)
+
+end_time = time.time()
+
+print(f"Imaging took {end_time-start_time} seconds")
+"""
+
+
+collection.add_job(RebinningStep.__name__, finished_job)
+collection.save_to_file(file_path)
+plot_cost_vs_time_from_collection(collection, "rebinning/cost_vs_time")
+average_and_plot("RebinningStep", collection, finished_job)
+plot_gantt(
+    collection,
+    f"rebinning_m7i/gantt/chunk_size{chunk_size}",
+    f"rebinning_gantt_runtime_{mem}.png",
+    mem,
+    chunk_size,
+)
 
 
 plot_cost_vs_time_pareto_real_ec2(
@@ -179,3 +224,4 @@ plot_cost_vs_time_pareto_real_ec2(
     "RebinningStep",
     7603,
 )
+"""

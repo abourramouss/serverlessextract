@@ -35,7 +35,7 @@ class RebinningStep(PipelineStep):
     def output(self) -> S3Path:
         return self._output
 
-    def build_command(self, ms: S3Path, parameters: str, output_ms: S3Path):
+    def execute_step(self, ms: S3Path, parameters: str, output_ms: S3Path):
         working_dir = PosixPath(
             os.getenv("HOME")
         )  # this is set to /tmp, to respect lambda convention.
@@ -69,6 +69,7 @@ class RebinningStep(PipelineStep):
 
         msout = f"{working_dir}/{ms_name}"
 
+        print(os.listdir(partition_path))
         cmd = [
             "DP3",
             str(param_path),
@@ -85,6 +86,7 @@ class RebinningStep(PipelineStep):
 
         print("stdout:")
         print(stdout)
+        print("stderr:")
         print(stderr)
         posix_source = time_it(
             "zip", data_source.zip_without_compression, time_records, PosixPath(msout)
