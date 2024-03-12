@@ -98,7 +98,7 @@ if __name__ == "__main__":
     for pr in partitions:
         total_process_start_time = time.time()
 
-        p = Partitioner("/home/ayman/Desktop/partition_1.ms")
+        p = Partitioner("/home/lab144/ayman/extract-project/SB205.MS")
         total_partitions, partition_time = p.partition_chunks(pr)
 
         dir_partitions = os.listdir("partitions")

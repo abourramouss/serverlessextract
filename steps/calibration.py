@@ -34,7 +34,7 @@ class CalibrationStep(PipelineStep):
     def output(self) -> S3Path:
         return self._output
 
-    def build_command(self, calibrated_ms: S3Path, parameters: str, h5: S3Path):
+    def execute_step(self, calibrated_ms: S3Path, parameters: str, h5: S3Path):
         working_dir = PosixPath(os.getenv("HOME"))
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
@@ -82,7 +82,6 @@ class CalibrationStep(PipelineStep):
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
         print(stdout, stderr)
 
-        # Assuming output_h5_path is the path to the .h5 file
         output_h5_path = PosixPath(output_h5)
         # Zip the .h5 file and .ms directory together
         combined_zip = data_source.zip_files(cal_partition_path, output_h5_path)
@@ -121,7 +120,7 @@ class SubstractionStep(PipelineStep):
     def output(self) -> S3Path:
         return self._output
 
-    def build_command(
+    def execute_step(
         self, calibrated_ms: S3Path, parameters: str, substracted_ms: S3Path
     ):
         time_records = []
@@ -158,12 +157,12 @@ class SubstractionStep(PipelineStep):
         params["sub"]["sub.sourcedb"] = sourcedb_dir
         param_path = dict_to_parset(params["sub"])
 
-        # Assuming there is only one .h5 file in the 'h5' directory
         print("H5 path")
         print(os.listdir(str(h5_path)))
         output_h5 = str(f"{h5_path}/output.h5")
         output_ms = str(calibrated_ms).split("/")[-1]
 
+        
         cmd = [
             "DP3",
             str(param_path),
@@ -179,7 +178,10 @@ class SubstractionStep(PipelineStep):
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
         print(stdout, stderr)
 
-        time_it("zip", data_source.zip, time_records, cal_combined_path)
+        
+
+        
+        time_it("zip", data_source.zip_without_compression, time_records, cal_combined_path)
         print(f"Uploading {cal_combined_path}.zip to {substracted_ms}")
         time_it(
             "upload_zip",
@@ -213,7 +215,7 @@ class ApplyCalibrationStep(PipelineStep):
     def output(self) -> S3Path:
         return self._output
 
-    def build_command(
+    def execute_step(
         self, calibrated_ms: S3Path, parameters: str, substracted_ms: S3Path
     ):
         data_source = LithopsDataSource()
@@ -250,7 +252,7 @@ class ApplyCalibrationStep(PipelineStep):
         print(os.listdir(str(sub_combined_path)))
         # Zipping the processed directory
         zipped_imaging = time_it(
-            "zip", data_source.zip, time_records, sub_combined_path
+            "zip", data_source.zip_without_compression, time_records, sub_combined_path
         )
         print(f"Uploading {zipped_imaging} to {substracted_ms}/{output_ms}")
 

@@ -62,7 +62,7 @@ class PipelineStep(ABC):
         pass
 
     @abstractmethod
-    def build_command(self, ms: S3Path, parameters: str, output_ms: S3Path):
+    def execute_step(self, ms: S3Path, parameters: str, output_ms: S3Path):
         pass
 
     def _execute_step(self, id, *args, **kwargs):
@@ -74,7 +74,7 @@ class PipelineStep(ABC):
             raise ValueError("Expected 'args' key with a tuple value in kwargs")
         # Yields a profiler object, creates a new process for profiling.
         with profiling_context(os.getpid()) as profiler:
-            function_timers = self.build_command(*command_args)
+            function_timers = self.execute_step(*command_args)
         profiler.function_timers = function_timers
         profiler.worker_id = id
 
