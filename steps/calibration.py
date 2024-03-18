@@ -162,7 +162,6 @@ class SubstractionStep(PipelineStep):
         output_h5 = str(f"{h5_path}/output.h5")
         output_ms = str(calibrated_ms).split("/")[-1]
 
-        
         cmd = [
             "DP3",
             str(param_path),
@@ -178,10 +177,9 @@ class SubstractionStep(PipelineStep):
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
         print(stdout, stderr)
 
-        
-
-        
-        time_it("zip", data_source.zip_without_compression, time_records, cal_combined_path)
+        time_it(
+            "zip", data_source.zip_without_compression, time_records, cal_combined_path
+        )
         print(f"Uploading {cal_combined_path}.zip to {substracted_ms}")
         time_it(
             "upload_zip",
