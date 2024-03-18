@@ -23,7 +23,7 @@ MB = 1024 * 1024
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_1100MB_9zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_60zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -144,29 +144,32 @@ finished_job = RebinningStep(
 )
 end_time = time.time()
 
-
-
 print(f"Rebinning took {end_time-start_time} seconds")
 
-
 start_time = time.time()
-
 finished_job = CalibrationStep(
     input_data_path=parameters["CalibrationStep"]["input_data_path"],
     parameters=parameters["CalibrationStep"]["parameters"],
     output=parameters["CalibrationStep"]["output"],
+).run(
+    chunk_size=chunk_size,
+    runtime_memory=mem,
+    cpus_per_worker=cpus_per_worker,
+    func_limit=1,
 )
-
 end_time = time.time()
-
 print(f"Calibration took {end_time-start_time} seconds")
-
 
 start_time = time.time()
 finished_job = SubstractionStep(
     input_data_path=parameters["SubstractionStep"]["input_data_path"],
     parameters=parameters["SubstractionStep"]["parameters"],
     output=parameters["SubstractionStep"]["output"],
+).run(
+    chunk_size=chunk_size,
+    runtime_memory=10000,
+    cpus_per_worker=cpus_per_worker,
+    func_limit=1,
 )
 
 
@@ -179,6 +182,11 @@ finished_job = ApplyCalibrationStep(
     input_data_path=parameters["ApplyCalibrationStep"]["input_data_path"],
     parameters=parameters["ApplyCalibrationStep"]["parameters"],
     output=parameters["ApplyCalibrationStep"]["output"],
+).run(
+    chunk_size=chunk_size,
+    runtime_memory=10000,
+    cpus_per_worker=cpus_per_worker,
+    func_limit=1,
 )
 
 end_time = time.time()

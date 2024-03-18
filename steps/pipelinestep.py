@@ -6,33 +6,7 @@ import requests
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
-from profiling import profiling_context
-from profiling import Job
-
-
-def detect_runtime_environment():
-    if "AWS_LAMBDA_FUNCTION_NAME" in os.environ:
-        return ("AWS Lambda", None)
-
-    try:
-        token_response = requests.put(
-            "http://169.254.169.254/latest/api/token",
-            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
-            timeout=1,
-        )
-        if token_response.status_code == 200:
-            token = token_response.text
-            response = requests.get(
-                "http://169.254.169.254/latest/meta-data/instance-type",
-                headers={"X-aws-ec2-metadata-token": token},
-                timeout=1,
-            )
-            if response.status_code == 200:
-                return ("Amazon EC2", response.text)
-    except requests.exceptions.RequestException:
-        pass
-
-    return ("Unknown", None)
+from profiling import profiling_context, Job, detect_runtime_environment
 
 
 class PipelineStep(ABC):

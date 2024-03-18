@@ -4,7 +4,33 @@ import os
 from multiprocessing import Process, Pipe
 import contextlib
 import json
+import requests
 from dataclasses import dataclass, asdict, fields
+
+
+def detect_runtime_environment():
+    if "AWS_LAMBDA_FUNCTION_NAME" in os.environ:
+        return ("AWS Lambda", None)
+
+    try:
+        token_response = requests.put(
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+            timeout=1,
+        )
+        if token_response.status_code == 200:
+            token = token_response.text
+            response = requests.get(
+                "http://169.254.169.254/latest/meta-data/instance-type",
+                headers={"X-aws-ec2-metadata-token": token},
+                timeout=1,
+            )
+            if response.status_code == 200:
+                return ("Amazon EC2", response.text)
+    except requests.exceptions.RequestException:
+        pass
+
+    return ("Unknown", None)
 
 
 def time_it(label, function, time_records, *args, **kwargs):
@@ -24,20 +50,22 @@ def time_it(label, function, time_records, *args, **kwargs):
 def profiling_context(monitored_process_pid):
     parent_conn, child_conn = Pipe()
     profiler = Profiler()
-
     monitoring_process = Process(
         target=profiler.start_profiling, args=(child_conn, monitored_process_pid)
     )
     monitoring_process.start()
-
     try:
         yield profiler
     finally:
         parent_conn.send("stop")
         monitoring_process.join(timeout=10)
-        if parent_conn.poll():
+        if parent_conn.poll(timeout=1):  # Add a timeout to the recv() call
             received_profiler_data = parent_conn.recv()
             profiler.update(received_profiler_data)
+        else:
+            print(
+                "No data received from the profiling process within the timeout period."
+            )
         if monitoring_process.is_alive():
             monitoring_process.terminate()
         parent_conn.close()
@@ -472,11 +500,9 @@ class Profiler:
     def start_profiling(self, conn, monitored_process_pid):
         index = 0
         try:
-            # The while condition is a fallback, but it should always end with the stop signal.
-            while psutil.pid_exists(monitored_process_pid):
+            while True:
                 self.metrics.collect_all_metrics(monitored_process_pid, index)
                 index += 1
-
                 if conn.poll():
                     message = conn.recv()
                     if message == "stop":
