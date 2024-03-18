@@ -92,13 +92,13 @@ def load_from_json(filename):
 
 
 if __name__ == "__main__":
-    partitions = [9, 10, 11, 12]
+    partitions = [60]
 
     results = {}
     for pr in partitions:
         total_process_start_time = time.time()
 
-        p = Partitioner("/home/lab144/ayman/extract-project/SB205.MS")
+        p = Partitioner("/home/users/ayman/ayman/extract-project/SB205.MS")
         total_partitions, partition_time = p.partition_chunks(pr)
 
         dir_partitions = os.listdir("partitions")
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         upload_directory_to_s3(
             zipped_partitions_dir,
             "ayman-extract",
-            f"partitions/partitions_1100MB_{pr}zip",
+            f"partitions/partitions_7900_{pr}zip",
         )
         upload_duration = time.time() - start_upload_time
 
