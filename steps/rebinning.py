@@ -11,6 +11,8 @@ import logging
 import os
 import shutil
 
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -39,9 +41,7 @@ class RebinningStep(PipelineStep):
         working_dir = PosixPath(
             os.getenv("HOME")
         )  # this is set to /tmp, to respect lambda convention.
-
         time_records = []
-
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
 
@@ -52,10 +52,12 @@ class RebinningStep(PipelineStep):
         partition_path = time_it(
             "unzip", data_source.unzip, time_records, partition_path
         )
-        print("listing directory")
+
+        logger.debug("Listing directory")
         ms_name = str(partition_path).split("/")[-1]
-        print(partition_path)
-        print(ms_name)
+        logger.debug(partition_path)
+        logger.debug(ms_name)
+
         # Profile the download_file method
         aoflag_path = time_it(
             "download_parameters",
@@ -63,13 +65,13 @@ class RebinningStep(PipelineStep):
             time_records,
             params["flagrebin"]["aoflag.strategy"],
         )
-        print(f"ao flag path: {aoflag_path}")
+        logger.debug(f"Ao flag path: {aoflag_path}")
         params["flagrebin"]["aoflag.strategy"] = aoflag_path
         param_path = dict_to_parset(params["flagrebin"])
 
         msout = f"{working_dir}/{ms_name}"
 
-        print(os.listdir(partition_path))
+        logger.debug(os.listdir(partition_path))
         cmd = [
             "DP3",
             str(param_path),
@@ -78,19 +80,20 @@ class RebinningStep(PipelineStep):
             f"aoflag.strategy={aoflag_path}",
         ]
 
-        # TODO: mirar si popen afecta al tiempo de ejecucion
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
         # Profile the process execution
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
 
-        print("stdout:")
-        print(stdout)
-        print("stderr:")
-        print(stderr)
+        logger.debug("Stdout:")
+        logger.debug(stdout)
+        logger.debug("Stderr:")
+        logger.debug(stderr)
+
         posix_source = time_it(
             "zip", data_source.zip_without_compression, time_records, PosixPath(msout)
         )
+
         # Profile the upload_directory method
         time_it(
             "upload_rebinnedms",

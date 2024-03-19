@@ -2,11 +2,47 @@ import lithops
 import pickle
 import time
 import os
-import requests
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
 from profiling import profiling_context, Job, detect_runtime_environment
+import subprocess
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def get_memory_limit_cgroupv2():
+    try:
+        output = (
+            subprocess.check_output(["cat", "/sys/fs/cgroup/memory.max"])
+            .decode("utf-8")
+            .strip()
+        )
+        if output == "max":
+            return "No limit"
+        memory_limit_gb = int(output) / (1024**3)
+        return memory_limit_gb
+    except Exception as e:
+        return str(e)
+
+
+def get_cpu_limit_cgroupv2():
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as f:
+            cpu_max = f.read().strip()
+            quota, period = cpu_max.split(" ")
+            quota = int(quota)
+            period = int(period)
+
+        if quota == -1:  # No limit
+            return "No limit"
+        else:
+            cpu_limit = quota / period
+            return cpu_limit
+    except Exception as e:
+        return str(e)
 
 
 class PipelineStep(ABC):
@@ -40,21 +76,27 @@ class PipelineStep(ABC):
         pass
 
     def _execute_step(self, id, *args, **kwargs):
-        # Call the context manager, and it will start the profiler in a separate process
-        print(f"Worker {id} executing step")
+        memory_limit = get_memory_limit_cgroupv2()
+        cpu_limit = get_cpu_limit_cgroupv2()
+
+        logger.info(f"Memory Limit: {memory_limit} GB")
+        logger.info(f"CPU Limit: {cpu_limit}")
+        logger.info(f"Worker {id} executing step")
+
         if "args" in kwargs and isinstance(kwargs["args"], tuple):
             command_args = kwargs["args"]
         else:
             raise ValueError("Expected 'args' key with a tuple value in kwargs")
-        # Yields a profiler object, creates a new process for profiling.
-        with profiling_context(os.getpid()) as profiler:
+
+        with profiling_context(
+            os.getpid()
+        ) as profiler:  # Assuming this context manager is defined elsewhere
             function_timers = self.execute_step(*command_args)
         profiler.function_timers = function_timers
         profiler.worker_id = id
 
         env, instance_type = detect_runtime_environment()
-
-        print(f"Worker {id} finished step" f" on {env} instance {instance_type}")
+        logger.info(f"Worker {id} finished step on {env} instance {instance_type}")
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
     def run(
@@ -65,7 +107,10 @@ class PipelineStep(ABC):
         func_limit: Optional[int] = None,
     ):
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
-        function_executor = lithops.FunctionExecutor(runtime_memory=runtime_memory)
+        function_executor = lithops.FunctionExecutor(
+            runtime_memory=runtime_memory, runtime_cpu=cpus_per_worker, log_level="INFO"
+        )
+
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
             prefix=f"{self.input_data_path.key}/",
