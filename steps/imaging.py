@@ -130,7 +130,9 @@ class ImagingStep(PipelineStep):
         func_limit: Optional[int] = None,
     ):
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
-        function_executor = lithops.FunctionExecutor(runtime_memory=runtime_memory)
+        function_executor = lithops.FunctionExecutor(
+            runtime_memory=runtime_memory, runtime_cpu=cpus_per_worker
+        )
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
             prefix=f"{self.input_data_path.key}/",
@@ -147,7 +149,7 @@ class ImagingStep(PipelineStep):
         parameters = (pickle.dumps(self.parameters),)
         output_ms = self.output
         start_time = time.time()
-        futures = function_executor.call_async(
+        future = function_executor.call_async(
             func=self._execute_step,
             data={
                 "args": [],
@@ -160,7 +162,7 @@ class ImagingStep(PipelineStep):
             extra_env=extra_env,
         )
 
-        result = function_executor.get_result(futures)
+        result = function_executor.get_result([future])
 
         end_time = time.time()
 
@@ -171,8 +173,8 @@ class ImagingStep(PipelineStep):
         except KeyError as e:
             print(f"KeyError: {e}. The expected key is not in the result dictionary.")
 
-        profiler.worker_start_tstamp = futures.stats["worker_start_tstamp"]
-        profiler.worker_end_tstamp = futures.stats["worker_end_tstamp"]
+        profiler.worker_start_tstamp = future.stats["worker_start_tstamp"]
+        profiler.worker_end_tstamp = future.stats["worker_end_tstamp"]
 
         job = Job(
             memory=runtime_memory,

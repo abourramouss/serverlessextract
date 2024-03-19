@@ -5,6 +5,8 @@ from steps.imaging import ImagingStep
 from s3path import S3Path
 from profiling import JobCollection
 from lithops import Storage
+
+"""
 from plot import (
     aggregate_and_plot,
     plot_gantt,
@@ -17,13 +19,14 @@ from plot import (
     plot_cost_vs_time_pareto_real_partition,
     plot_cost_vs_time_pareto_real_ec2,
 )
+"""
 
 
 MB = 1024 * 1024
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_60zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_20zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -167,7 +170,7 @@ finished_job = SubstractionStep(
     output=parameters["SubstractionStep"]["output"],
 ).run(
     chunk_size=chunk_size,
-    runtime_memory=10000,
+    runtime_memory=mem,
     cpus_per_worker=cpus_per_worker,
     func_limit=1,
 )
@@ -184,7 +187,7 @@ finished_job = ApplyCalibrationStep(
     output=parameters["ApplyCalibrationStep"]["output"],
 ).run(
     chunk_size=chunk_size,
-    runtime_memory=10000,
+    runtime_memory=mem,
     cpus_per_worker=cpus_per_worker,
     func_limit=1,
 )
@@ -202,8 +205,8 @@ finished_job = ImagingStep(
     output=parameters["ImagingStep"]["output_path"],
 ).run(
     chunk_size=chunk_size,
-    runtime_memory=10000,
-    cpus_per_worker=cpus_per_worker,
+    runtime_memory=mem,
+    cpus_per_worker=5,
     func_limit=1,
 )
 
