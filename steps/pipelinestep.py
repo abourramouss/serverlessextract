@@ -9,8 +9,10 @@ from profiling import profiling_context, Job, detect_runtime_environment
 import subprocess
 import logging
 
-logging.basicConfig(level=logging.INFO)
+log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
+logger.propagate = True
 
 
 def get_memory_limit_cgroupv2():
@@ -120,12 +122,18 @@ class PipelineStep(ABC):
         if func_limit:
             keys = keys[:func_limit]
 
+        # Special treatment for list parameters
+        if isinstance(self.parameters, list):
+            serialized_parameters = [pickle.dumps(param) for param in self.parameters]
+        else:
+            serialized_parameters = pickle.dumps(self.parameters)
+
         s3_paths = [
             (
                 S3Path.from_bucket_key(
                     bucket=self.input_data_path.bucket, key=partition
                 ),
-                pickle.dumps(self.parameters),
+                serialized_parameters,
                 self.output,
             )
             for partition in keys

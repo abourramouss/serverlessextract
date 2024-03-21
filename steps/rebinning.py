@@ -12,8 +12,8 @@ import os
 import shutil
 
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.propagate = True
 
 
 class RebinningStep(PipelineStep):
@@ -53,7 +53,7 @@ class RebinningStep(PipelineStep):
             "unzip", data_source.unzip, time_records, partition_path
         )
 
-        logger.debug("Listing directory")
+        logger.info("Listing directory")
         ms_name = str(partition_path).split("/")[-1]
         logger.debug(partition_path)
         logger.debug(ms_name)

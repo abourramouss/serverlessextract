@@ -11,6 +11,7 @@ import os
 from pathlib import PosixPath
 
 logger = logging.getLogger(__name__)
+logger.propagate = True
 
 
 class CalibrationStep(PipelineStep):
@@ -146,6 +147,7 @@ class SubstractionStep(PipelineStep):
         # Extracting paths for .ms and .h5 from the unzipped combined folder
         cal_partition_path = cal_combined_path / "ms"
         h5_path = cal_combined_path / "h5"
+
         print("Calibrated partition path")
         print(cal_partition_path, h5_path)
         sourcedb_dir = time_it(
