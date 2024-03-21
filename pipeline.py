@@ -33,7 +33,7 @@ MB = 1024 * 1024
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_60zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_14zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -141,7 +141,6 @@ logger.info(f"CPUs per worker: {cpus_per_worker}")
 
 collection = JobCollection().load_from_file(file_path)
 
-
 start_time = time.time()
 finished_job = RebinningStep(
     input_data_path=parameters["RebinningStep"]["input_data_path"],
@@ -151,10 +150,10 @@ finished_job = RebinningStep(
     chunk_size=chunk_size,
     runtime_memory=mem,
     cpus_per_worker=cpus_per_worker,
-    func_limit=1,
+    func_limit=8,
 )
-end_time = time.time()
 
+end_time = time.time()
 rebinning_time = end_time - start_time
 
 
@@ -172,53 +171,9 @@ finished_job = CalibrationSubstractionApplyCalibrationStep(
     runtime_memory=mem,
     cpus_per_worker=cpus_per_worker,
 )
-"""
-start_time = time.time()
-finished_job = CalibrationStep(
-    input_data_path=parameters["CalibrationStep"]["input_data_path"],
-    parameters=parameters["CalibrationStep"]["parameters"],
-    output=parameters["CalibrationStep"]["output"],
-).run(
-    chunk_size=chunk_size,
-    runtime_memory=mem,
-    cpus_per_worker=cpus_per_worker,
-)
-
 end_time = time.time()
 
 calibration_time = end_time - start_time
-
-
-start_time = time.time()
-finished_job = SubstractionStep(
-    input_data_path=parameters["SubstractionStep"]["input_data_path"],
-    parameters=parameters["SubstractionStep"]["parameters"],
-    output=parameters["SubstractionStep"]["output"],
-).run(
-    chunk_size=chunk_size,
-    runtime_memory=mem,
-    cpus_per_worker=cpus_per_worker,
-)
-
-end_time = time.time()
-
-substraction_time = end_time - start_time
-
-start_time = time.time()
-finished_job = ApplyCalibrationStep(
-    input_data_path=parameters["ApplyCalibrationStep"]["input_data_path"],
-    parameters=parameters["ApplyCalibrationStep"]["parameters"],
-    output=parameters["ApplyCalibrationStep"]["output"],
-).run(
-    chunk_size=chunk_size,
-    runtime_memory=mem,
-    cpus_per_worker=cpus_per_worker,
-    func_limit=1,
-)
-
-end_time = time.time()
-"""
-applycal_time = end_time - start_time
 
 start_time = time.time()
 
@@ -234,6 +189,7 @@ finished_job = ImagingStep(
 
 end_time = time.time()
 
+imaging_time = end_time - start_time
 
 logger.info(f"Chunk size: {chunk_size}")
 logger.info(f"Runtime memory: {mem}")
@@ -241,11 +197,9 @@ logger.info(f"CPUs per worker: {cpus_per_worker}")
 
 logger.info(f"Rebinning time: {rebinning_time}")
 logger.info(f"Calibration time: {calibration_time}")
-logger.info(f"Substraction time: {substraction_time}")
-logger.info(f"ApplyCalibration time: {applycal_time}")
 logger.info(f"Imaging time: {end_time-start_time}")
-"""
 
+"""
 
 collection.add_job(RebinningStep.__name__, finished_job)
 collection.save_to_file(file_path)
