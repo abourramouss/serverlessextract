@@ -1,7 +1,9 @@
 import time
+import logging
 from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
 from steps.imaging import ImagingStep
+from steps.agg_cal import CalibrationSubstractionApplyCalibrationStep
 from s3path import S3Path
 from profiling import JobCollection
 from lithops import Storage
@@ -20,13 +22,18 @@ from plot import (
     plot_cost_vs_time_pareto_real_ec2,
 )
 """
+log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
 
+# Configure logging with the custom format
+logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
+
+logger = logging.getLogger(__name__)
 
 MB = 1024 * 1024
 
 parameters = {
     "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_20zip"),
+        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_60zip"),
         "parameters": {
             "flagrebin": {
                 "steps": "[aoflag, avg, count]",
@@ -117,10 +124,9 @@ parameters = {
 file_path = "profilers.json"
 
 cpus_per_worker = 2
+mem = 4000
 storage = Storage()
 
-
-mem = 4000
 
 print(parameters["RebinningStep"]["input_data_path"])
 chunk_size = storage.head_object(
@@ -128,8 +134,10 @@ chunk_size = storage.head_object(
     f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
 )
 chunk_size = int(chunk_size["content-length"]) // MB
-print("Chunk size:", chunk_size)
-print("Runtime memory", mem)
+
+logger.info(f"Chunk size: {chunk_size}")
+logger.info(f"Runtime memory: {mem}")
+logger.info(f"CPUs per worker: {cpus_per_worker}")
 
 collection = JobCollection().load_from_file(file_path)
 
@@ -147,8 +155,24 @@ finished_job = RebinningStep(
 )
 end_time = time.time()
 
-print(f"Rebinning took {end_time-start_time} seconds")
+rebinning_time = end_time - start_time
 
+
+start_time = time.time()
+finished_job = CalibrationSubstractionApplyCalibrationStep(
+    input_data_path=parameters["RebinningStep"]["output"],
+    parameters=[
+        parameters["CalibrationStep"]["parameters"],
+        parameters["SubstractionStep"]["parameters"],
+        parameters["ApplyCalibrationStep"]["parameters"],
+    ],
+    output=parameters["ApplyCalibrationStep"]["output"],
+).run(
+    chunk_size=chunk_size,
+    runtime_memory=mem,
+    cpus_per_worker=cpus_per_worker,
+)
+"""
 start_time = time.time()
 finished_job = CalibrationStep(
     input_data_path=parameters["CalibrationStep"]["input_data_path"],
@@ -158,10 +182,12 @@ finished_job = CalibrationStep(
     chunk_size=chunk_size,
     runtime_memory=mem,
     cpus_per_worker=cpus_per_worker,
-    func_limit=1,
 )
+
 end_time = time.time()
-print(f"Calibration took {end_time-start_time} seconds")
+
+calibration_time = end_time - start_time
+
 
 start_time = time.time()
 finished_job = SubstractionStep(
@@ -172,13 +198,11 @@ finished_job = SubstractionStep(
     chunk_size=chunk_size,
     runtime_memory=mem,
     cpus_per_worker=cpus_per_worker,
-    func_limit=1,
 )
-
 
 end_time = time.time()
 
-print(f"Substraction took {end_time-start_time} seconds")
+substraction_time = end_time - start_time
 
 start_time = time.time()
 finished_job = ApplyCalibrationStep(
@@ -193,9 +217,8 @@ finished_job = ApplyCalibrationStep(
 )
 
 end_time = time.time()
-
-print(f"ApplyCalibration took {end_time-start_time} seconds")
-
+"""
+applycal_time = end_time - start_time
 
 start_time = time.time()
 
@@ -205,14 +228,22 @@ finished_job = ImagingStep(
     output=parameters["ImagingStep"]["output_path"],
 ).run(
     chunk_size=chunk_size,
-    runtime_memory=mem,
-    cpus_per_worker=5,
-    func_limit=1,
+    runtime_memory=10000,
+    cpus_per_worker=10,
 )
 
 end_time = time.time()
 
-print(f"Imaging took {end_time-start_time} seconds")
+
+logger.info(f"Chunk size: {chunk_size}")
+logger.info(f"Runtime memory: {mem}")
+logger.info(f"CPUs per worker: {cpus_per_worker}")
+
+logger.info(f"Rebinning time: {rebinning_time}")
+logger.info(f"Calibration time: {calibration_time}")
+logger.info(f"Substraction time: {substraction_time}")
+logger.info(f"ApplyCalibration time: {applycal_time}")
+logger.info(f"Imaging time: {end_time-start_time}")
 """
 
 

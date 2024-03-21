@@ -50,6 +50,8 @@ class ImagingStep(PipelineStep):
                 "unzip", data_source.unzip, time_records, partition_path
             )
 
+        logger.info("Listing directory")
+        logger.info(os.listdir(working_dir))
         cal_ms = [
             d
             for d in os.listdir(partition_path)
@@ -161,6 +163,8 @@ class ImagingStep(PipelineStep):
             },
             extra_env=extra_env,
         )
+
+        logger.info(f"parameters: {self.parameters}")
 
         result = function_executor.get_result([future])
 
