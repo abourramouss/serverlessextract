@@ -14,6 +14,7 @@ import subprocess as sp
 import time
 
 logger = logging.getLogger(__name__)
+logger.propagate = True
 
 
 class ImagingStep(PipelineStep):
@@ -41,7 +42,10 @@ class ImagingStep(PipelineStep):
         working_dir = PosixPath(os.getenv("HOME"))
         time_records = []
         data_source = LithopsDataSource()
-        # Profile the download_directory method
+
+        # Initialize an empty list to store partition paths
+        partitions = []
+
         for partition in ms:
             partition_path = time_it(
                 "download_ms", data_source.download_directory, time_records, partition
@@ -50,15 +54,7 @@ class ImagingStep(PipelineStep):
                 "unzip", data_source.unzip, time_records, partition_path
             )
 
-        logger.info("Listing directory")
-        logger.info(os.listdir(working_dir))
-        cal_ms = [
-            d
-            for d in os.listdir(partition_path)
-            if os.path.isdir(os.path.join(partition_path, d))
-        ]
-
-        os.chdir(f"{partition_path}")
+            partitions.append(str(partition_path))
 
         cmd = [
             "wsclean",
@@ -92,13 +88,31 @@ class ImagingStep(PipelineStep):
             "0",
             "-name",
             "/tmp/Cygloop-205-210-b0-1024",
-            "ms",
         ]
 
-        print(cmd)
+        # Append the paths of all partitions to the command
+        cmd.extend(partitions)
+
+        logger.info(cmd)
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = proc.communicate()
-
+        logger.info("Listing directory")
+        logger.info(os.listdir(f"{working_dir}"))
+        image_fits_file = next(
+            (f for f in os.listdir(working_dir) if f.endswith("-image.fits")), None
+        )
+        if image_fits_file:
+            posix_source = PosixPath(working_dir) / image_fits_file
+            logger.info(f"Uploading {image_fits_file} to S3: {output_ms}")
+            time_it(
+                "upload_image_fits",
+                data_source.upload_file,
+                time_records,
+                posix_source,
+                S3Path(f"{output_ms}/{image_fits_file}"),
+            )
+        else:
+            logger.error("No -image.fits file found to upload.")
         print("stdout:")
         print(stdout)
         print("stderr:")

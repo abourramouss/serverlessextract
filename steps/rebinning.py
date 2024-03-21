@@ -11,7 +11,6 @@ import logging
 import os
 import shutil
 
-
 logger = logging.getLogger(__name__)
 logger.propagate = True
 
@@ -38,14 +37,11 @@ class RebinningStep(PipelineStep):
         return self._output
 
     def execute_step(self, ms: S3Path, parameters: str, output_ms: S3Path):
-        working_dir = PosixPath(
-            os.getenv("HOME")
-        )  # this is set to /tmp, to respect lambda convention.
+        working_dir = PosixPath(os.getenv("HOME"))
         time_records = []
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
 
-        # Profile the download_directory method
         partition_path = time_it(
             "download_ms", data_source.download_directory, time_records, ms
         )
@@ -58,7 +54,6 @@ class RebinningStep(PipelineStep):
         logger.debug(partition_path)
         logger.debug(ms_name)
 
-        # Profile the download_file method
         aoflag_path = time_it(
             "download_parameters",
             data_source.download_file,
@@ -68,10 +63,9 @@ class RebinningStep(PipelineStep):
         logger.debug(f"Ao flag path: {aoflag_path}")
         params["flagrebin"]["aoflag.strategy"] = aoflag_path
         param_path = dict_to_parset(params["flagrebin"])
-
         msout = f"{working_dir}/{ms_name}"
-
         logger.debug(os.listdir(partition_path))
+
         cmd = [
             "DP3",
             str(param_path),
@@ -79,10 +73,7 @@ class RebinningStep(PipelineStep):
             f"msout={msout}",
             f"aoflag.strategy={aoflag_path}",
         ]
-
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-
-        # Profile the process execution
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
 
         logger.debug("Stdout:")
@@ -93,8 +84,6 @@ class RebinningStep(PipelineStep):
         posix_source = time_it(
             "zip", data_source.zip_without_compression, time_records, PosixPath(msout)
         )
-
-        # Profile the upload_directory method
         time_it(
             "upload_rebinnedms",
             data_source.upload_file,

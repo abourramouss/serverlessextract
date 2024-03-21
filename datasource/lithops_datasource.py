@@ -4,11 +4,7 @@ from .datasource import DataSource
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from s3path import S3Path
 from pathlib import PosixPath
-import boto3
-from boto3.s3.transfer import S3Transfer, TransferConfig
-import threading
-import concurrent.futures
-import botocore
+
 
 KB = 1024
 MB = KB * KB
