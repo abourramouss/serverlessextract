@@ -345,7 +345,7 @@ class MetricCollector:
 
         process_list = [current_process] + children
 
-        print(f"Tracking process PIDs: {[proc.pid for proc in process_list]}")
+        # print(f"Tracking process PIDs: {[proc.pid for proc in process_list]}")
 
         for proc in process_list:
             pid = proc.pid
