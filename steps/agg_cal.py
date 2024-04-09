@@ -55,13 +55,9 @@ class CalibrationSubstractionApplyCalibrationStep(PipelineStep):
             working_dir,
         )
 
-        logger.info("Downloaded measurement set to:", cal_partition_path)
-
         cal_partition_path = time_it(
             "unzip", data_source.unzip, time_records, cal_partition_path
         )
-        logger.info("Unzipped partition path:", cal_partition_path)
-        logger.info("Directory contents:", os.listdir(str(cal_partition_path)))
 
         sourcedb_dir = time_it(
             "download_parameters",
@@ -71,36 +67,17 @@ class CalibrationSubstractionApplyCalibrationStep(PipelineStep):
         )
         calibration_params["cal"]["cal.sourcedb"] = sourcedb_dir
         param_path = dict_to_parset(calibration_params["cal"])
-        logger.info("Output H5 file will be:", output_h5)
 
-        cmd = [
-            "DP3",
-            str(param_path),
-            f"msin={cal_partition_path}",
-            f"cal.h5parm={output_h5}",
-            f"cal.sourcedb={sourcedb_dir}",
-        ]
+        cmd = ["DP3", str(param_path)]
         logger.info("Executing DP3 command for calibration")
 
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
 
         if proc.returncode != 0:
-            logger.info("[ERROR] DP3 calibration script execution failed")
+            logger.info("DP3 calibration script execution failed")
         else:
             logger.info("DP3 calibration script executed successfully")
-
-        logger.info("Listing temporary directory contents")
-        logger.info(os.listdir("/tmp"))
-        output_h5_path = PosixPath(output_h5)
-
-        # Substraction Step
-        logger.info("Starting substraction step")
-        logger.info(
-            "[INFO] Calibrated partition and output H5 path:",
-            cal_partition_path,
-            output_h5_path,
-        )
 
         sourcedb_dir = time_it(
             "download_parameters_1",
@@ -118,7 +95,7 @@ class CalibrationSubstractionApplyCalibrationStep(PipelineStep):
             f"sub.applycal.parmdb={output_h5}",
             f"sub.sourcedb={sourcedb_dir}",
         ]
-        logger.info(" Executing DP3 command for substraction")
+        logger.info("Executing DP3 command for substraction")
 
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
@@ -128,7 +105,6 @@ class CalibrationSubstractionApplyCalibrationStep(PipelineStep):
             logger.info("DP3 substraction script executed successfully")
 
         # ApplyCalibration Step
-        logger.info("Starting ApplyCalibration step")
         params = apply_params
         param_path = dict_to_parset(params["apply"])
         sub_combined_path = cal_partition_path
@@ -139,7 +115,6 @@ class CalibrationSubstractionApplyCalibrationStep(PipelineStep):
             f"msin={cal_partition_path}",
             f"apply.parmdb={output_h5}",
         ]
-        logger.info("Executing DP3 command for ApplyCalibration")
 
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = time_it("execute_command", proc.communicate, time_records)

@@ -38,7 +38,7 @@ class ImagingStep(PipelineStep):
     def output(self) -> S3Path:
         return self._output
 
-    def execute_step(self, ms: List[S3Path], parameters: str, output_ms: S3Path):
+    def execute_step(self, ms: List[S3Path], parameters: str, output_ms: S3Path, cpus):
         working_dir = PosixPath(os.getenv("HOME"))
         time_records = []
         data_source = LithopsDataSource()
@@ -58,6 +58,8 @@ class ImagingStep(PipelineStep):
 
         cmd = [
             "wsclean",
+            "-j",
+            str(cpus),
             "-size",
             "1024",
             "1024",
@@ -95,7 +97,9 @@ class ImagingStep(PipelineStep):
 
         logger.info(cmd)
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+
         stdout, stderr = proc.communicate()
+
         logger.info("Listing directory")
         logger.info(os.listdir(f"{working_dir}"))
         image_fits_file = next(
@@ -120,19 +124,20 @@ class ImagingStep(PipelineStep):
 
         return time_records
 
-    def _execute_step(self, *args, **kwargs):
+    def _execute_step(self, id, *args, **kwargs):
         ms = kwargs["kwargs"]["ms"]
         parameters = kwargs["kwargs"]["parameters"]
         output_ms = kwargs["kwargs"]["output_ms"]
+        cpus = kwargs["kwargs"]["cpus"]
 
         print(f"Worker executing step with {len(ms)} ms paths")
 
         # Call the actual execution step
         with profiling_context(os.getpid()) as profiler:
-            function_timers = self.execute_step(ms, parameters, output_ms)
+            function_timers = self.execute_step(ms, parameters, output_ms, cpus)
 
         profiler.function_timers = function_timers
-        profiler.worker_id = "id"  # Adjust based on your requirements
+        profiler.worker_id = id
 
         env, instance_type = detect_runtime_environment()
         print(f"Worker finished step on {env} instance {instance_type}")
@@ -140,19 +145,21 @@ class ImagingStep(PipelineStep):
 
     def run(
         self,
-        chunk_size: int,
-        runtime_memory: int,
-        cpus_per_worker: int,
         func_limit: Optional[int] = None,
     ):
+        # Parameters to optimize
+        runtime_memory = 2000
+        cpus_per_worker = 4
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(
-            runtime_memory=runtime_memory, runtime_cpu=cpus_per_worker
+            runtime_memory=runtime_memory,
+            runtime_cpu=cpus_per_worker,
         )
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
             prefix=f"{self.input_data_path.key}/",
         )
+
         if f"{self.input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
         if func_limit:
@@ -162,6 +169,9 @@ class ImagingStep(PipelineStep):
             S3Path.from_bucket_key(bucket=self.input_data_path.bucket, key=partition)
             for partition in keys
         ]
+
+        chunk_size = f"{lithops.Storage().head_object(self.input_data_path.bucket, keys[0])['content-length']}/{1024**2}"
+
         parameters = (pickle.dumps(self.parameters),)
         output_ms = self.output
         start_time = time.time()
@@ -173,6 +183,7 @@ class ImagingStep(PipelineStep):
                     "ms": ms,
                     "parameters": parameters,
                     "output_ms": output_ms,
+                    "cpus": cpus_per_worker,
                 },
             },
             extra_env=extra_env,

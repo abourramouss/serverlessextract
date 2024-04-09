@@ -95,9 +95,7 @@ RUN pip install --upgrade --ignore-installed pip wheel setuptools \
 	ps-mem \
 	tblib \
 	psutil \
-	s3path \
-	lithops==2.9.0
-
+	s3path 
 
 WORKDIR ${FUNCTION_DIR}
 

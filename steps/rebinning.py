@@ -75,7 +75,7 @@ class RebinningStep(PipelineStep):
         ]
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = time_it("execute_script", proc.communicate, time_records)
-
+        logger.info(stdout)
         logger.debug("Stdout:")
         logger.debug(stdout)
         logger.debug("Stderr:")
