@@ -141,39 +141,6 @@ logger.info(f"CPUs per worker: {cpus_per_worker}")
 
 collection = JobCollection().load_from_file(file_path)
 
-start_time = time.time()
-finished_job = RebinningStep(
-    input_data_path=parameters["RebinningStep"]["input_data_path"],
-    parameters=parameters["RebinningStep"]["parameters"],
-    output=parameters["RebinningStep"]["output"],
-).run(
-    chunk_size=chunk_size,
-    runtime_memory=mem,
-    cpus_per_worker=cpus_per_worker,
-    func_limit=8,
-)
-
-end_time = time.time()
-rebinning_time = end_time - start_time
-
-
-start_time = time.time()
-finished_job = CalibrationSubstractionApplyCalibrationStep(
-    input_data_path=parameters["RebinningStep"]["output"],
-    parameters=[
-        parameters["CalibrationStep"]["parameters"],
-        parameters["SubstractionStep"]["parameters"],
-        parameters["ApplyCalibrationStep"]["parameters"],
-    ],
-    output=parameters["ApplyCalibrationStep"]["output"],
-).run(
-    chunk_size=chunk_size,
-    runtime_memory=mem,
-    cpus_per_worker=cpus_per_worker,
-)
-end_time = time.time()
-
-calibration_time = end_time - start_time
 
 start_time = time.time()
 
@@ -181,11 +148,7 @@ finished_job = ImagingStep(
     input_data_path=parameters["ImagingStep"]["input_data_path"],
     parameters="",
     output=parameters["ImagingStep"]["output_path"],
-).run(
-    chunk_size=chunk_size,
-    runtime_memory=10000,
-    cpus_per_worker=10,
-)
+).run()
 
 end_time = time.time()
 
@@ -195,8 +158,6 @@ logger.info(f"Chunk size: {chunk_size}")
 logger.info(f"Runtime memory: {mem}")
 logger.info(f"CPUs per worker: {cpus_per_worker}")
 
-logger.info(f"Rebinning time: {rebinning_time}")
-logger.info(f"Calibration time: {calibration_time}")
 logger.info(f"Imaging time: {end_time-start_time}")
 
 """

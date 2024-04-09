@@ -2,12 +2,14 @@ import lithops
 import pickle
 import time
 import os
+import subprocess
+import logging
+
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
 from profiling import profiling_context, Job, detect_runtime_environment
-import subprocess
-import logging
+
 
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
@@ -90,9 +92,7 @@ class PipelineStep(ABC):
         else:
             raise ValueError("Expected 'args' key with a tuple value in kwargs")
 
-        with profiling_context(
-            os.getpid()
-        ) as profiler:  # Assuming this context manager is defined elsewhere
+        with profiling_context(os.getpid()) as profiler:
             function_timers = self.execute_step(*command_args)
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -101,24 +101,38 @@ class PipelineStep(ABC):
         logger.info(f"Worker {id} finished step on {env} instance {instance_type}")
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
-    def run(
-        self,
-        chunk_size: int,
-        runtime_memory: int,
-        cpus_per_worker: int,
-        func_limit: Optional[int] = None,
-    ):
+    def run(self, func_limit: Optional[int] = None):
+        # provisioning_layer = ProvisioningLayer()
+        # previous_execution_data = self._collect_previous_execution_data()
+        # optimal_parameters = provisioning_layer.get_optimal_parameters(
+        #    self.input_data_path, previous_execution_data
+        # )
+
+        # Hardcoded optimal parameters for testing
+        runtime_memory = 4000
+        cpus_per_worker = 2
+
+        # Partition the dataset based on the optimal number of partitions
+        # partition_sizes = partition_ms(self.input_data_path, num_partitions)
+
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(
-            runtime_memory=runtime_memory, runtime_cpu=cpus_per_worker, log_level="INFO"
+            runtime_memory=runtime_memory,
+            runtime_cpu=cpus_per_worker,
+            log_level="INFO",
         )
 
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
             prefix=f"{self.input_data_path.key}/",
         )
+
+        # Get size of the first chunk in the list, that will be the chunk size
+        chunk_size = f"{lithops.Storage().head_object(self.input_data_path.bucket, keys[0])['content-length']}/{1024**2}"
+
         if f"{self.input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
+
         if func_limit:
             keys = keys[:func_limit]
 
@@ -143,7 +157,6 @@ class PipelineStep(ABC):
         futures = function_executor.map(
             self._execute_step, s3_paths, extra_env=extra_env
         )
-
         results = function_executor.get_result(futures)
         end_time = time.time()
 
