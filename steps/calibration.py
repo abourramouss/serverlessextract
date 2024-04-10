@@ -2,7 +2,7 @@ import pickle
 import subprocess as sp
 from typing import Dict, List, Optional
 from s3path import S3Path
-from .pipelinestep import PipelineStep
+from .pipelinestep import PipelineStep, DP3Step
 from datasource import LithopsDataSource
 from util import dict_to_parset
 from profiling import time_it
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 logger.propagate = True
 
 
-class CalibrationStep(PipelineStep):
+class CalibrationStep(DP3Step):
     def __init__(
         self,
         input_data_path: Dict[str, S3Path],
