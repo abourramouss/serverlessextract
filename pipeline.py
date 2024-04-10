@@ -4,24 +4,13 @@ from steps.rebinning import RebinningStep
 from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
 from steps.imaging import ImagingStep
 from steps.agg_cal import CalibrationSubstractionApplyCalibrationStep
+from steps.pipelinestep import DP3Step
 from s3path import S3Path
 from profiling import JobCollection
 from lithops import Storage
+from datasource import InputS3Path, OutputS3Path
 
-"""
-from plot import (
-    aggregate_and_plot,
-    plot_gantt,
-    average_and_plot,
-    plot_cost_vs_time_from_collection,
-    plot_cost_vs_time_pareto_simulated,
-    plot_cost_vs_time_pareto_real,
-    plot_speedup_vs_cost_from_collection,
-    plot_memory_speedup_from_collection,
-    plot_cost_vs_time_pareto_real_partition,
-    plot_cost_vs_time_pareto_real_ec2,
-)
-"""
+
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
 
 # Configure logging with the custom format
@@ -32,36 +21,25 @@ logger = logging.getLogger(__name__)
 MB = 1024 * 1024
 
 parameters = {
-    "RebinningStep": {
-        "input_data_path": S3Path("/ayman-extract/partitions/partitions_7900_14zip"),
-        "parameters": {
-            "flagrebin": {
-                "steps": "[aoflag, avg, count]",
-                "aoflag.type": "aoflagger",
-                "aoflag.strategy": S3Path(
-                    "/ayman-extract/parameters/rebinning/STEP1-NenuFAR64C1S.lua"
-                ),
-                "avg.type": "averager",
-                "avg.freqstep": 4,
-                "avg.timestep": 8,
-            }
-        },
-        "output": S3Path("/ayman-extract/extract-data/rebinning_out/"),
-    },
     "CalibrationStep": {
-        "input_data_path": S3Path("/ayman-extract/extract-data/rebinning_out/"),
         "parameters": {
             "cal": {
-                "msin": "",
+                "msin": InputS3Path(
+                    bucket="ayman-extract",
+                    key="extract-data/rebinning_out",
+                ),
                 "msin.datacolumn": "DATA",
                 "msout": ".",
                 "steps": "[cal]",
                 "cal.type": "ddecal",
                 "cal.mode": "diagonal",
-                "cal.sourcedb": S3Path(
-                    "/ayman-extract/parameters/calibration/STEP2A-apparent.sourcedb"
+                "cal.sourcedb": InputS3Path(
+                    bucket="ayman-extract",
+                    key="parameters/calibration/STEP2A-apparent.sourcedb",
                 ),
-                "cal.h5parm": "",
+                "cal.h5parm": OutputS3Path(
+                    bucket="ayman-extract", key="extract-data/calibration_out/h5"
+                ),
                 "cal.solint": 4,
                 "cal.nchan": 4,
                 "cal.maxiter": 50,
@@ -69,7 +47,6 @@ parameters = {
                 "cal.smoothnessconstraint": 2e6,
             }
         },
-        "output": S3Path("/ayman-extract/extract-data/calibration_out/"),
     },
     "SubstractionStep": {
         "input_data_path": S3Path("/ayman-extract/extract-data/calibration_out/"),
@@ -114,71 +91,17 @@ parameters = {
         },
         "output": S3Path("/ayman-extract/extract-data/applycal_out/"),
     },
-    "ImagingStep": {
-        "input_data_path": S3Path("/ayman-extract/extract-data/applycal_out/"),
-        "output_path": S3Path("/ayman-extract/extract-data/imaging_out/"),
-    },
 }
-
-
-file_path = "profilers.json"
-
-cpus_per_worker = 2
-mem = 4000
-storage = Storage()
-
-
-print(parameters["RebinningStep"]["input_data_path"])
-chunk_size = storage.head_object(
-    parameters["RebinningStep"]["input_data_path"].bucket,
-    f"{parameters['RebinningStep']['input_data_path'].key}/partition_1.ms.zip",
-)
-chunk_size = int(chunk_size["content-length"]) // MB
-
-logger.info(f"Chunk size: {chunk_size}")
-logger.info(f"Runtime memory: {mem}")
-logger.info(f"CPUs per worker: {cpus_per_worker}")
-
-collection = JobCollection().load_from_file(file_path)
 
 
 start_time = time.time()
 
-finished_job = ImagingStep(
-    input_data_path=parameters["ImagingStep"]["input_data_path"],
-    parameters="",
-    output=parameters["ImagingStep"]["output_path"],
+
+finished_job = DP3Step(
+    parameters=parameters["CalibrationStep"]["parameters"]["cal"]
 ).run()
+
 
 end_time = time.time()
 
 imaging_time = end_time - start_time
-
-logger.info(f"Chunk size: {chunk_size}")
-logger.info(f"Runtime memory: {mem}")
-logger.info(f"CPUs per worker: {cpus_per_worker}")
-
-logger.info(f"Imaging time: {end_time-start_time}")
-
-"""
-
-collection.add_job(RebinningStep.__name__, finished_job)
-collection.save_to_file(file_path)
-plot_cost_vs_time_from_collection(collection, "rebinning/cost_vs_time")
-average_and_plot("RebinningStep", collection, finished_job)
-plot_gantt(
-    collection,
-    f"rebinning_m7i/gantt/chunk_size{chunk_size}",
-    f"rebinning_gantt_runtime_{mem}.png",
-    mem,
-    chunk_size,
-)
-
-
-plot_cost_vs_time_pareto_real_ec2(
-    collection,
-    "rebinning_m7i/cost_vs_time_pareto_real_partition",
-    "RebinningStep",
-    7603,
-)
-"""

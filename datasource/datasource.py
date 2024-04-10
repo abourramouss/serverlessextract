@@ -7,6 +7,56 @@ import os
 import subprocess
 
 
+class InputS3Path:
+    def __init__(self, bucket: str, key: str):
+        self._bucket = bucket
+        self._key = key
+
+    @property
+    def bucket(self):
+        return self._bucket
+
+    @bucket.setter
+    def bucket(self, value):
+        self._bucket = value
+
+    @property
+    def key(self):
+        return self._key
+
+    @key.setter
+    def key(self, value):
+        self._key = value
+
+    def __str__(self):
+        return f"/{self._bucket}/{self._key}"
+
+
+class OutputS3Path:
+    def __init__(self, bucket: str, key: str):
+        self._bucket = bucket
+        self._key = key
+
+    @property
+    def bucket(self):
+        return self._bucket
+
+    @bucket.setter
+    def bucket(self, value):
+        self._bucket = value
+
+    @property
+    def key(self):
+        return self._key
+
+    @key.setter
+    def key(self, value):
+        self._key = value
+
+    def __str__(self):
+        return f"/{self._bucket}/{self._key}"
+
+
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
 class DataSource(ABC):
     @abstractmethod
