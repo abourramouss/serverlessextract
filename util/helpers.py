@@ -47,32 +47,3 @@ def dict_to_parset(
         file.write(parset_content)
 
     return output_path
-
-
-def setup_logging(level=logging.INFO):
-    interferometry_logger = logging.getLogger()
-    interferometry_logger.propagate = False
-
-    interferometry_logger.setLevel(level)
-    sh = logging.StreamHandler(stream=sys.stdout)
-    sh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s:%(lineno)s - %(message)s"
-    )
-    sh.setFormatter(formatter)
-    interferometry_logger.addHandler(sh)
-
-    # Format Lithops logger the same way as serverlessgenomics module logger
-    lithops_logger = logging.getLogger("lithops")
-    lithops_logger.propagate = False
-
-    lithops_logger.setLevel(level)
-    sh = logging.StreamHandler(stream=sys.stdout)
-    sh.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
-    sh.setFormatter(formatter)
-    lithops_logger.addHandler(sh)
-
-    # Disable module analyzer logger from Lithops
-    multyvac_logger = logging.getLogger("lithops.libs.multyvac")
-    multyvac_logger.setLevel(logging.CRITICAL)

@@ -2,12 +2,17 @@ import lithops
 import pickle
 import time
 import os
+import subprocess
+import logging
+import subprocess as sp
+
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from s3path import S3Path
+from pathlib import PosixPath
 from profiling import profiling_context, Job, detect_runtime_environment
-import subprocess
-import logging
+from datasource import LithopsDataSource, InputS3Path, OutputS3Path
+from util import dict_to_parset
 
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
@@ -90,9 +95,7 @@ class PipelineStep(ABC):
         else:
             raise ValueError("Expected 'args' key with a tuple value in kwargs")
 
-        with profiling_context(
-            os.getpid()
-        ) as profiler:  # Assuming this context manager is defined elsewhere
+        with profiling_context(os.getpid()) as profiler:
             function_timers = self.execute_step(*command_args)
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -101,24 +104,38 @@ class PipelineStep(ABC):
         logger.info(f"Worker {id} finished step on {env} instance {instance_type}")
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
-    def run(
-        self,
-        chunk_size: int,
-        runtime_memory: int,
-        cpus_per_worker: int,
-        func_limit: Optional[int] = None,
-    ):
+    def run(self, func_limit: Optional[int] = None):
+        # provisioning_layer = ProvisioningLayer()
+        # previous_execution_data = self._collect_previous_execution_data()
+        # optimal_parameters = provisioning_layer.get_optimal_parameters(
+        #    self.input_data_path, previous_execution_data
+        # )
+
+        # Hardcoded optimal parameters for testing
+        runtime_memory = 4000
+        cpus_per_worker = 2
+
+        # Partition the dataset based on the optimal number of partitions
+        # partition_sizes = partition_ms(self.input_data_path, num_partitions)
+
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(
-            runtime_memory=runtime_memory, runtime_cpu=cpus_per_worker, log_level="INFO"
+            runtime_memory=runtime_memory,
+            runtime_cpu=cpus_per_worker,
+            log_level="INFO",
         )
 
         keys = lithops.Storage().list_keys(
             bucket=self.input_data_path.bucket,
             prefix=f"{self.input_data_path.key}/",
         )
+
+        # Get size of the first chunk in the list, that will be the chunk size
+        chunk_size = f"{lithops.Storage().head_object(self.input_data_path.bucket, keys[0])['content-length']}/{1024**2}"
+
         if f"{self.input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
+
         if func_limit:
             keys = keys[:func_limit]
 
@@ -143,7 +160,143 @@ class PipelineStep(ABC):
         futures = function_executor.map(
             self._execute_step, s3_paths, extra_env=extra_env
         )
+        results = function_executor.get_result(futures)
+        end_time = time.time()
 
+        env = results[0]["env"]
+        instance_type = results[0]["instance_type"]
+        profilers = [result["profiler"] for result in results]
+
+        for result, future in zip(results, futures):
+            profiler = result["profiler"]
+            profiler.worker_start_tstamp = future.stats["worker_start_tstamp"]
+            profiler.worker_end_tstamp = future.stats["worker_end_tstamp"]
+
+        job = Job(
+            memory=runtime_memory,
+            cpus_per_worker=cpus_per_worker,
+            chunk_size=chunk_size,
+            start_time=start_time,
+            end_time=end_time,
+            number_workers=len(profilers),
+            profilers=profilers,
+            instance_type=instance_type,
+            environment=env,
+        )
+
+        return job
+
+
+class DP3Step(ABC):
+    def __init__(
+        self,
+        parameters: Dict,
+    ):
+        self._parameters = parameters
+
+    def execute_step(self, parameters: bytes):
+        working_dir = PosixPath(os.getenv("HOME"))
+        data_source = LithopsDataSource()
+
+        params = pickle.loads(parameters)
+        p = params["msin"]
+        logger.info(f"params {p.key}")
+
+        for key, val in params.items():
+            if type(val) == InputS3Path:
+                path = data_source.download_directory(val, working_dir)
+                # Check if the path is a directory
+                if os.path.isdir(path):
+                    params[key] = path
+                elif path.suffix.lower() == ".zip":
+                    # Handle the zip file case here
+                    params[key] = data_source.unzip(path)
+                else:
+                    # other cases
+                    pass
+
+        logger.info(f"params {params}")
+        params_path = dict_to_parset(params)
+        cmd = ["DP3", str(params_path)]
+
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        stdout, stderr = proc.communicate()
+        logger.info(stdout)
+        logger.info(stderr)
+        time_records = []
+
+        return time_records
+
+    def _execute_step(self, id, *args, **kwargs):
+        memory_limit = get_memory_limit_cgroupv2()
+        cpu_limit = get_cpu_limit_cgroupv2()
+
+        logger.info(f"Memory Limit: {memory_limit} GB")
+        logger.info(f"CPU Limit: {cpu_limit}")
+        logger.info(f"Worker {id} executing step")
+        logger.info(f"kwargs: {kwargs} args: {args}")
+        if "args" in kwargs and isinstance(kwargs["args"], tuple):
+            command_args = kwargs["args"]
+        else:
+            raise ValueError("Expected 'args' key with a tuple value in kwargs")
+
+        with profiling_context(os.getpid()) as profiler:
+            logger.info(f"commands args: {command_args}")
+            function_timers = self.execute_step(*command_args)
+
+        profiler.function_timers = function_timers
+        profiler.worker_id = id
+
+        env, instance_type = detect_runtime_environment()
+        logger.info(f"Worker {id} finished step on {env} instance {instance_type}")
+        return {"profiler": profiler, "env": env, "instance_type": instance_type}
+
+    def run(self, func_limit: Optional[int] = None):
+        # provisioning_layer = ProvisioningLayer()
+        # previous_execution_data = self._collect_previous_execution_data()
+        # optimal_parameters = provisioning_layer.get_optimal_parameters(
+        #    self.input_data_path, previous_execution_data
+        # )
+
+        # Hardcoded optimal parameters for testing
+        runtime_memory = 4000
+        cpus_per_worker = 2
+
+        # Partition the dataset based on the optimal number of partitions
+        # partition_sizes = partition_ms(self.input_data_path, num_partitions)
+
+        extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
+        function_executor = lithops.FunctionExecutor(
+            runtime_memory=runtime_memory,
+            runtime_cpu=cpus_per_worker,
+            log_level="INFO",
+        )
+
+        bucket = self._parameters["msin"].bucket
+        prefix = self._parameters["msin"].key
+        keys = lithops.Storage().list_keys(
+            bucket=bucket,
+            prefix=prefix,
+        )
+
+        function_params = []
+        for key in keys:
+            new_parameters = self._parameters.copy()
+            new_parameters["msin"] = InputS3Path(bucket=bucket, key=key)
+            function_params.append(pickle.dumps(new_parameters))
+
+        print(function_params)
+        logger.info(function_params)
+        # Get size of the first chunk in the list, that will be the chunk size
+        chunk_size = f"{lithops.Storage().head_object(bucket, keys[0])['content-length']}/{1024**2}"
+
+        if func_limit:
+            keys = keys[:func_limit]
+
+        start_time = time.time()
+        futures = function_executor.map(
+            self._execute_step, function_params, extra_env=extra_env
+        )
         results = function_executor.get_result(futures)
         end_time = time.time()
 
