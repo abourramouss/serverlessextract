@@ -38,8 +38,11 @@ parameters = {
                     key="parameters/calibration/STEP2A-apparent.sourcedb",
                 ),
                 "cal.h5parm": OutputS3Path(
-                    bucket="ayman-extract", key="extract-data/calibration_out/h5"
+                    bucket="ayman-extract",
+                    key="extract-data/calibration_out/h5",
+                    fmt="h5",
                 ),
+                "numthreads": 4,
                 "cal.solint": 4,
                 "cal.nchan": 4,
                 "cal.maxiter": 50,

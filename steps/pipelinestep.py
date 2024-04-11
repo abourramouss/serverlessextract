@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from s3path import S3Path
 from pathlib import PosixPath
 from profiling import profiling_context, Job, detect_runtime_environment
-from datasource import LithopsDataSource, InputS3Path, OutputS3Path
+from datasource import LithopsDataSource, InputS3, OutputS3, s3_to_local_path
 from util import dict_to_parset
 
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
@@ -187,23 +187,23 @@ class PipelineStep(ABC):
         return job
 
 
-class DP3Step(ABC):
+class DP3Step:
     def __init__(
         self,
         parameters: Dict,
     ):
         self._parameters = parameters
 
-    def execute_step(self, parameters: bytes):
+    def execute_step(self, parameters: bytes, id):
+
         working_dir = PosixPath(os.getenv("HOME"))
         data_source = LithopsDataSource()
 
         params = pickle.loads(parameters)
-        p = params["msin"]
-        logger.info(f"params {p.key}")
-
+        logger.info(f"Worker id: {id}")
+        upload_directories = {}
         for key, val in params.items():
-            if type(val) == InputS3Path:
+            if isinstance(val, InputS3):
                 path = data_source.download_directory(val, working_dir)
                 # Check if the path is a directory
                 if os.path.isdir(path):
@@ -214,15 +214,40 @@ class DP3Step(ABC):
                 else:
                     # other cases
                     pass
+            elif isinstance(val, OutputS3):
+                local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
+                file_path = f"{local_directory_path}/{id}.{val.fmt}"
+                directory_path = os.path.dirname(file_path)
+                os.makedirs(
+                    directory_path, exist_ok=True
+                )  # Create the directory if it doesn't exist
+                logger.info(f"Created directory {directory_path}")
+                logger.info(file_path)
+                upload_directories[key] = params[key]
+                params[key] = file_path
+                # Create an empty file
+                with open(file_path, "w") as file:
+                    pass
 
-        logger.info(f"params {params}")
         params_path = dict_to_parset(params)
         cmd = ["DP3", str(params_path)]
-
+        # Execution of the DP3
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = proc.communicate()
         logger.info(stdout)
         logger.info(stderr)
+
+        # Upload output files / directories
+        for key, val in upload_directories.items():
+            local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
+            file_path = f"{local_directory_path}/{id}.{val.fmt}"
+            data_source.upload_file(
+                file_path,
+                OutputS3(
+                    bucket=val.bucket, key=f"{val.key}/{id}.{val.fmt}", fmt=val.fmt
+                ),
+            )
+            logger.info(f"Output file uploaded to {val}/{id}.{val.fmt}")
         time_records = []
 
         return time_records
@@ -242,7 +267,7 @@ class DP3Step(ABC):
 
         with profiling_context(os.getpid()) as profiler:
             logger.info(f"commands args: {command_args}")
-            function_timers = self.execute_step(*command_args)
+            function_timers = self.execute_step(*command_args, id=id)
 
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -282,7 +307,7 @@ class DP3Step(ABC):
         function_params = []
         for key in keys:
             new_parameters = self._parameters.copy()
-            new_parameters["msin"] = InputS3Path(bucket=bucket, key=key)
+            new_parameters["msin"] = InputS3(bucket=bucket, key=key)
             function_params.append(pickle.dumps(new_parameters))
 
         print(function_params)

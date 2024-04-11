@@ -74,7 +74,7 @@ class LithopsDataSource(DataSource):
         """Uploads a local file to S3."""
         try:
             self.storage.upload_file(str(read_path), write_path.bucket, write_path.key)
-        except Exception as e:  # Consider narrowing down the exceptions caught.
+        except Exception as e:
             print(f"Failed to upload file {read_path} to {write_path}. Error: {e}")
 
     def upload_directory(self, read_path: PosixPath, write_base_path: S3Path) -> None:
