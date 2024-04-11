@@ -7,7 +7,7 @@ import os
 import subprocess
 
 
-class InputS3Path:
+class InputS3:
     def __init__(self, bucket: str, key: str):
         self._bucket = bucket
         self._key = key
@@ -32,10 +32,11 @@ class InputS3Path:
         return f"/{self._bucket}/{self._key}"
 
 
-class OutputS3Path:
-    def __init__(self, bucket: str, key: str):
+class OutputS3:
+    def __init__(self, bucket: str, key: str, fmt: str):
         self._bucket = bucket
         self._key = key
+        self._format = fmt
 
     @property
     def bucket(self):
@@ -44,6 +45,14 @@ class OutputS3Path:
     @bucket.setter
     def bucket(self, value):
         self._bucket = value
+
+    @property
+    def fmt(self):
+        return self._format
+
+    @fmt.setter
+    def fmt(self, value):
+        self._format = value
 
     @property
     def key(self):
