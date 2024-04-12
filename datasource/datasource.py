@@ -4,7 +4,7 @@ from typing import Union
 from s3path import S3Path
 import zipfile
 import os
-import shutil
+import subprocess
 
 
 class InputS3:
@@ -113,19 +113,19 @@ class DataSource(ABC):
     def unzip(self, ms: PosixPath) -> PosixPath:
         with zipfile.ZipFile(ms, "r") as zip_file:
             extract_path = ms.parent
-            print(f"Starting extraction. Base directory: {extract_path}")
-            for zipinfo in zip_file.infolist():
-                targetpath = extract_path / zipinfo.filename
-                print(f"Processing: {zipinfo.filename} -> {targetpath}")
-                if zipinfo.is_dir():
-                    print(f"Creating directory: {targetpath}")
-                    os.makedirs(targetpath, exist_ok=True)
-                else:
-                    print(f"Creating file: {targetpath}")
-                    os.makedirs(targetpath.parent, exist_ok=True)
-                    with zip_file.open(zipinfo) as source, open(
-                        targetpath, "wb"
-                    ) as target:
-                        shutil.copyfileobj(source, target)
-            print(f"Extracted contents to: {extract_path}")
-        return extract_path
+            zip_file.extractall(extract_path)
+
+            # Collect the first level of directories/files in the zip
+            root_items = {item.split("/")[0] for item in zip_file.namelist()}
+
+        # Determine if all contents are under a single root directory
+        if len(root_items) == 1:
+            part_name = next(iter(root_items))
+            new_ms_path = extract_path / part_name
+            if not (new_ms_path.exists() and new_ms_path.is_dir()):
+                os.makedirs(new_ms_path, exist_ok=True)
+        else:
+            new_ms_path = extract_path
+
+        print(f"Unzipped to: {new_ms_path}")
+        return new_ms_path

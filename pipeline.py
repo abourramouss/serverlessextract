@@ -38,11 +38,11 @@ rebinning_params = {
         "msout": OutputS3(
             bucket="ayman-extract",
             key="extract-data/rebinning_out",
-            naming_pattern="partition_{id}.ms.zip",
+            naming_pattern="partition_{id}.ms",
         ),
     }
 }
-# finished_job = DP3Step(parameters=rebinning_params["flagrebin"]).run(func_limit=1)
+finished_job = DP3Step(parameters=rebinning_params["flagrebin"]).run(func_limit=1)
 
 
 end_time = time.time()
@@ -81,8 +81,7 @@ calibration_params = {
 }
 
 start_time = time.time()
-# Assuming DP3Step is properly defined with a method `run` that can accept `func_limit`
-finished_job = DP3Step(parameters=calibration_params["cal"]).run(func_limit=1)
+# finished_job = DP3Step(parameters=calibration_params["cal"]).run(func_limit=1)
 end_time = time.time()
 
 logger.info(f"Calibration completed in {end_time - start_time} seconds.")
