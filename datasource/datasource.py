@@ -4,7 +4,7 @@ from typing import Union
 from s3path import S3Path
 import zipfile
 import os
-import subprocess
+import shutil
 
 
 class InputS3:
@@ -33,10 +33,10 @@ class InputS3:
 
 
 class OutputS3:
-    def __init__(self, bucket: str, key: str, fmt: str):
+    def __init__(self, bucket: str, key: str, naming_pattern="{id}.output"):
         self._bucket = bucket
         self._key = key
-        self._format = fmt
+        self._naming_pattern = naming_pattern
 
     @property
     def bucket(self):
@@ -47,14 +47,6 @@ class OutputS3:
         self._bucket = value
 
     @property
-    def fmt(self):
-        return self._format
-
-    @fmt.setter
-    def fmt(self, value):
-        self._format = value
-
-    @property
     def key(self):
         return self._key
 
@@ -62,8 +54,26 @@ class OutputS3:
     def key(self, value):
         self._key = value
 
+    @property
+    def naming_pattern(self):
+        return self._naming_pattern
+
+    @naming_pattern.setter
+    def naming_pattern(self, value):
+        self._naming_pattern = value
+
+    def formatted_filename(self, **kwargs):
+        return self._naming_pattern.format(**kwargs)
+
+    def construct_s3_path(self, id=None):
+        if id is not None:
+            filename = self.naming_pattern.format(id=id)
+        else:
+            filename = self.naming_pattern.format(id="default")  # default or some logic
+        return f"{self._bucket}/{os.path.join(self._key, filename)}"
+
     def __str__(self):
-        return f"/{self._bucket}/{self._key}"
+        return f"s3://{self._bucket}/{self._key}/{self.naming_pattern}"
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -100,55 +110,22 @@ class DataSource(ABC):
                     zip_file.write(file_path, arcname)
         return zip_filepath
 
-    def zip_files(self, ms: PosixPath, h5_file: PosixPath) -> PosixPath:
-        partition_name = ms.name
-        zip_filepath = PosixPath(f"{ms.parent}/{partition_name}.zip")
-        with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for root, dirs, files in os.walk(ms):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.join(
-                        partition_name,
-                        "ms",
-                        os.path.relpath(file_path, start=ms),
-                    )
-                    zip_file.write(file_path, arcname)
-
-            h5_arcname = os.path.join(partition_name, "h5", h5_file.name)
-            zip_file.write(h5_file, h5_arcname)
-
-        return zip_filepath
-
-    def unzip_fast(self, ms: PosixPath) -> PosixPath:
-        extract_path = ms.parent
-        # Execute the unzip command
-        subprocess.run(["unzip", "-q", str(ms), "-d", str(extract_path)], check=True)
-
-        zip_file = zipfile.ZipFile(ms)
-        root_items = {item.split("/")[0] for item in zip_file.namelist()}
-        zip_file.close()  # Close the zip file as we only needed it for listing contents
-
-        if len(root_items) == 1:
-            part_name = next(iter(root_items))
-            new_ms_path = extract_path / part_name
-        else:
-            new_ms_path = extract_path
-
-        print(f"Unzipped to: {new_ms_path}")
-        return new_ms_path
-
     def unzip(self, ms: PosixPath) -> PosixPath:
-        zip_file = zipfile.ZipFile(ms)
-        extract_path = ms.parent
-        zip_file.extractall(extract_path)
-        zip_file.close()
-
-        root_items = {item.split("/")[0] for item in zip_file.namelist()}
-        if len(root_items) == 1:
-            part_name = next(iter(root_items))
-            new_ms_path = extract_path / part_name
-        else:
-            new_ms_path = extract_path
-
-        print(f"Unzipped to: {new_ms_path}")
-        return new_ms_path
+        with zipfile.ZipFile(ms, "r") as zip_file:
+            extract_path = ms.parent
+            print(f"Starting extraction. Base directory: {extract_path}")
+            for zipinfo in zip_file.infolist():
+                targetpath = extract_path / zipinfo.filename
+                print(f"Processing: {zipinfo.filename} -> {targetpath}")
+                if zipinfo.is_dir():
+                    print(f"Creating directory: {targetpath}")
+                    os.makedirs(targetpath, exist_ok=True)
+                else:
+                    print(f"Creating file: {targetpath}")
+                    os.makedirs(targetpath.parent, exist_ok=True)
+                    with zip_file.open(zipinfo) as source, open(
+                        targetpath, "wb"
+                    ) as target:
+                        shutil.copyfileobj(source, target)
+            print(f"Extracted contents to: {extract_path}")
+        return extract_path
