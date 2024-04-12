@@ -8,100 +8,80 @@ from steps.pipelinestep import DP3Step
 from s3path import S3Path
 from profiling import JobCollection
 from lithops import Storage
-from datasource import InputS3Path, OutputS3Path
+from datasource import InputS3, OutputS3
 
 
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
 
 # Configure logging with the custom format
 logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
-
 logger = logging.getLogger(__name__)
-
-MB = 1024 * 1024
-
-parameters = {
-    "CalibrationStep": {
-        "parameters": {
-            "cal": {
-                "msin": InputS3Path(
-                    bucket="ayman-extract",
-                    key="extract-data/rebinning_out",
-                ),
-                "msin.datacolumn": "DATA",
-                "msout": ".",
-                "steps": "[cal]",
-                "cal.type": "ddecal",
-                "cal.mode": "diagonal",
-                "cal.sourcedb": InputS3Path(
-                    bucket="ayman-extract",
-                    key="parameters/calibration/STEP2A-apparent.sourcedb",
-                ),
-                "cal.h5parm": OutputS3Path(
-                    bucket="ayman-extract", key="extract-data/calibration_out/h5"
-                ),
-                "cal.solint": 4,
-                "cal.nchan": 4,
-                "cal.maxiter": 50,
-                "cal.uvlambdamin": 5,
-                "cal.smoothnessconstraint": 2e6,
-            }
-        },
-    },
-    "SubstractionStep": {
-        "input_data_path": S3Path("/ayman-extract/extract-data/calibration_out/"),
-        "parameters": {
-            "sub": {
-                "msin": "",
-                "msin.datacolumn": "DATA",
-                "msout": ".",
-                "msout.datacolumn": "SUBTRACTED_DATA",
-                "steps": "[sub]",
-                "sub.type": "h5parmpredict",
-                "sub.sourcedb": S3Path(
-                    "/ayman-extract/parameters/calibration/STEP2A-apparent.sourcedb"
-                ),
-                "sub.directions": "[[CygA],[CasA]]",
-                "sub.operation": "subtract",
-                "sub.applycal.parmdb": "",
-                "sub.applycal.steps": "[sub_apply_amp,sub_apply_phase]",
-                "sub.applycal.correction": "fulljones",
-                "sub.applycal.sub_apply_amp.correction": "amplitude000",
-                "sub.applycal.sub_apply_phase.correction": "phase000",
-            }
-        },
-        "output": S3Path("/ayman-extract/extract-data/substraction_out/"),
-    },
-    "ApplyCalibrationStep": {
-        "input_data_path": S3Path("/ayman-extract/extract-data/substraction_out/"),
-        "parameters": {
-            "apply": {
-                "msin": "",
-                "msin.datacolumn": "SUBTRACTED_DATA",
-                "msout": ".",
-                "msout.datacolumn": "CORRECTED_DATA",
-                "steps": "[apply]",
-                "apply.type": "applycal",
-                "apply.steps": "[apply_amp,apply_phase]",
-                "apply.apply_amp.correction": "amplitude000",
-                "apply.apply_phase.correction": "phase000",
-                "apply.direction": "[Main]",
-                "apply.parmdb": "",
-            }
-        },
-        "output": S3Path("/ayman-extract/extract-data/applycal_out/"),
-    },
-}
 
 
 start_time = time.time()
 
-
-finished_job = DP3Step(
-    parameters=parameters["CalibrationStep"]["parameters"]["cal"]
-).run()
+rebinning_params = {
+    "flagrebin": {
+        "msin": InputS3(
+            bucket="ayman-extract",
+            key="partitions/partitions_7900_20zip",
+        ),
+        "steps": "[aoflag, avg, count]",
+        "aoflag.type": "aoflagger",
+        "aoflag.strategy": InputS3(
+            bucket="ayman-extract",
+            key="parameters/rebinning/STEP1-NenuFAR64C1S.lua",
+        ),
+        "avg.type": "averager",
+        "avg.freqstep": 4,
+        "avg.timestep": 8,
+        "msout": OutputS3(
+            bucket="ayman-extract",
+            key="extract-data/rebinning_out",
+            naming_pattern="partition_{id}.ms",
+        ),
+    }
+}
+finished_job = DP3Step(parameters=rebinning_params["flagrebin"]).run(func_limit=1)
 
 
 end_time = time.time()
 
-imaging_time = end_time - start_time
+
+logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
+
+
+calibration_params = {
+    "cal": {
+        "msin": InputS3(
+            bucket="ayman-extract",
+            key="extract-data/rebinning_out",
+        ),
+        "msin.datacolumn": "DATA",
+        "msout": ".",
+        "steps": "[cal]",
+        "cal.type": "ddecal",
+        "cal.mode": "diagonal",
+        "cal.sourcedb": InputS3(
+            bucket="ayman-extract",
+            key="parameters/calibration/STEP2A-apparent.sourcedb",
+        ),
+        "cal.h5parm": OutputS3(
+            bucket="ayman-extract",
+            key="extract-data/calibration_out",
+            naming_pattern="calibration_{id}.h5.zip",
+        ),
+        "numthreads": 4,
+        "cal.solint": 4,
+        "cal.nchan": 4,
+        "cal.maxiter": 50,
+        "cal.uvlambdamin": 5,
+        "cal.smoothnessconstraint": 2e6,
+    }
+}
+
+start_time = time.time()
+# finished_job = DP3Step(parameters=calibration_params["cal"]).run(func_limit=1)
+end_time = time.time()
+
+logger.info(f"Calibration completed in {end_time - start_time} seconds.")

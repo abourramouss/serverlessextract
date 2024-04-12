@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from s3path import S3Path
 from pathlib import PosixPath
 from profiling import profiling_context, Job, detect_runtime_environment
-from datasource import LithopsDataSource, InputS3Path, OutputS3Path
+from datasource import LithopsDataSource, InputS3, OutputS3, s3_to_local_path
 from util import dict_to_parset
 
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
@@ -187,44 +187,78 @@ class PipelineStep(ABC):
         return job
 
 
-class DP3Step(ABC):
+class DP3Step:
     def __init__(
         self,
         parameters: Dict,
     ):
         self._parameters = parameters
 
-    def execute_step(self, parameters: bytes):
+    def execute_step(self, parameters: bytes, id):
         working_dir = PosixPath(os.getenv("HOME"))
         data_source = LithopsDataSource()
 
         params = pickle.loads(parameters)
-        p = params["msin"]
-        logger.info(f"params {p.key}")
+        logger.info(f"Worker id: {id} started execution.")
 
+        upload_directories = {}
         for key, val in params.items():
-            if type(val) == InputS3Path:
+            if isinstance(val, InputS3):
+                logger.info(f"Downloading data for key {key} from S3.")
                 path = data_source.download_directory(val, working_dir)
-                # Check if the path is a directory
-                if os.path.isdir(path):
-                    params[key] = path
-                elif path.suffix.lower() == ".zip":
-                    # Handle the zip file case here
-                    params[key] = data_source.unzip(path)
+                if path.is_dir():
+                    logger.info(f"Path {path} is a directory.")
+                    logger.info(os.listdir(path))
+                elif path.is_file():
+                    if path.suffix.lower() == ".zip":
+                        logger.info(f"Path {path} is a zip file, extracting.")
+                        path = data_source.unzip(path)
+                        logger.info(f"Extracted path: {path}")
+                        logger.info(os.listdir(path))
+                    else:
+                        logger.info(f"Path {path} is a recognized file type.")
                 else:
-                    # other cases
-                    pass
+                    logger.warning(
+                        f"Path {path} is neither a directory nor a recognized file type."
+                    )
 
-        logger.info(f"params {params}")
+                # Convert PosixPath to string for DP3 command
+                params[key] = str(path)
+
+            elif isinstance(val, OutputS3):
+                logger.info(f"Preparing output path for key {key}.")
+                local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
+                file_name = val.formatted_filename(id=id)
+                file_path = f"{local_directory_path}/{file_name}"
+                directory_path = os.path.dirname(file_path)
+                os.makedirs(directory_path, exist_ok=True)
+                logger.info(f"Created directory {directory_path} for output.")
+                logger.info(f"Output file path: {file_path}")
+                upload_directories[key] = val
+                params[key] = str(file_path)  # Ensure output paths are also strings
+
+        logger.info(params)
         params_path = dict_to_parset(params)
         cmd = ["DP3", str(params_path)]
-
+        # Execution of the DP3
+        logger.info(f"Executing DP3 command with parameters: {cmd}")
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = proc.communicate()
-        logger.info(stdout)
-        logger.info(stderr)
+        logger.info(f"DP3 execution stdout: {stdout}")
+        logger.info(f"DP3 execution stderr: {stderr}")
+
+        # Upload output files / directories, now with zipping without compression
+        for key, val in upload_directories.items():
+            output_path = PosixPath(params[key])
+            if output_path.exists():
+                # Call zip_without_compression with the correct single argument
+                zip_path = data_source.zip_without_compression(output_path)
+                logger.info(f"Uploading zipped output {zip_path} to S3 for key {key}.")
+                data_source.upload_file(zip_path, val, id=id)
+
         time_records = []
 
+        logger.info(f"Worker id: {id} completed execution.")
         return time_records
 
     def _execute_step(self, id, *args, **kwargs):
@@ -242,7 +276,7 @@ class DP3Step(ABC):
 
         with profiling_context(os.getpid()) as profiler:
             logger.info(f"commands args: {command_args}")
-            function_timers = self.execute_step(*command_args)
+            function_timers = self.execute_step(*command_args, id=id)
 
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -278,11 +312,13 @@ class DP3Step(ABC):
             bucket=bucket,
             prefix=prefix,
         )
+        if func_limit:
+            keys = keys[:func_limit]
 
         function_params = []
         for key in keys:
             new_parameters = self._parameters.copy()
-            new_parameters["msin"] = InputS3Path(bucket=bucket, key=key)
+            new_parameters["msin"] = InputS3(bucket=bucket, key=key)
             function_params.append(pickle.dumps(new_parameters))
 
         print(function_params)
