@@ -17,13 +17,26 @@ def s3_to_local_path(
     return PosixPath(local_path)
 
 
-def local_to_s3_path(local_path: str, base_local_dir: str = "/tmp"):
-    """Converts a local file path to an S3Path."""
-    local_path = os.path.abspath(local_path)
-    components = local_path.replace(base_local_dir, "").split(os.path.sep)[1:]
-    bucket = components[0]
-    key = "/".join(components[1:])
-    return OutputS3(bucket=bucket, key=key)
+def local_path_to_s3(
+    local_path: PosixPath, base_local_dir: PosixPath = PosixPath("/tmp")
+) -> OutputS3:
+
+    if not local_path.is_absolute():
+        raise ValueError("local_path must be an absolute path")
+
+    try:
+        relative_path = local_path.relative_to(base_local_dir)
+    except ValueError:
+        raise ValueError("local_path is not a child of the base_local_dir")
+
+    parts = relative_path.parts
+    bucket = parts[0]
+    file_name_with_ext = parts[-1]
+    file_name, file_ext = os.path.splitext(file_name_with_ext)
+    key = "/".join(parts[1:-1]) if len(parts) > 2 else ""
+    return OutputS3(
+        bucket=bucket, key=key, file_ext=file_ext.strip("."), file_name=file_name
+    )
 
 
 class LithopsDataSource(DataSource):
@@ -69,18 +82,20 @@ class LithopsDataSource(DataSource):
 
         return local_directory_path
 
-    def upload_file(self, local_path: PosixPath, output_s3: OutputS3, id=None):
+    def upload_file(self, local_path: PosixPath, output_s3: OutputS3):
         """Uploads a single file to an S3 bucket based on the OutputS3 configuration."""
-        s3_path = output_s3.construct_s3_path(id=id)
-        bucket, key = s3_path.split("/", 1)
+        if not os.path.isfile(local_path):
+            raise ValueError(f"The path {local_path} is not a file.")
+
+        print(f"upload_file {local_path} to {output_s3}")
+        bucket = output_s3.bucket
+        key = os.path.join(output_s3.key, local_path.name)
         try:
             self.storage.upload_file(str(local_path), bucket, key)
         except Exception as e:
             print(f"Failed to upload file {local_path} to {output_s3}. Error: {e}")
 
-    def upload_directory(
-        self, local_directory: PosixPath, output_s3: OutputS3, id=None
-    ):
+    def upload_directory(self, local_directory: PosixPath, output_s3: OutputS3):
         """Uploads all files within a local directory to an S3 path, maintaining structure."""
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             futures = []
@@ -95,9 +110,7 @@ class LithopsDataSource(DataSource):
                         output_s3.bucket, full_s3_path, output_s3.naming_pattern
                     )
                     futures.append(
-                        executor.submit(
-                            self.upload_file, local_file_path, future_s3, id=id
-                        )
+                        executor.submit(self.upload_file, local_file_path, future_s3)
                     )
             for future in as_completed(futures):
                 future.result()
