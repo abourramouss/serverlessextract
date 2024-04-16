@@ -11,7 +11,13 @@ from typing import Dict, List, Optional
 from s3path import S3Path
 from pathlib import PosixPath
 from profiling import profiling_context, Job, detect_runtime_environment
-from datasource import LithopsDataSource, InputS3, OutputS3, s3_to_local_path
+from datasource import (
+    LithopsDataSource,
+    InputS3,
+    OutputS3,
+    s3_to_local_path,
+    local_path_to_s3,
+)
 from util import dict_to_parset
 
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
@@ -234,32 +240,15 @@ class DP3Step:
             elif isinstance(val, OutputS3):
                 logger.info(f"Preparing output path for key {key} using {val}")
                 local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
-                if "msin" in params:
-                    ms_base_name_components = (
-                        params["msin"].rsplit("/", 1)[-1].split(".")
-                    )
-                    ms_base_name = (
-                        ms_base_name_components[0]
-                        if ms_base_name_components
-                        else "default"
-                    )
-
-                if val.separate_dir:
-                    final_output_path = os.path.join(
-                        local_directory_path,
-                        ms_base_name,
-                        ms_base_name + (val.file_ext if val.file_ext else ""),
-                    )
-                else:
-                    final_output_path = os.path.join(
-                        local_directory_path,
-                        ms_base_name + (val.file_ext if val.file_ext else ""),
-                    )
-
+                final_output_path = (
+                    local_directory_path / f"{val.file_name}.{val.file_ext}"
+                )
                 os.makedirs(os.path.dirname(final_output_path), exist_ok=True)
                 logger.info(f"Output path prepared: {final_output_path}")
+                # TODO: Add the parameters or whatever at the end, basically compose the key correctly
+                directories[final_output_path] = val
                 params[key] = final_output_path
-
+                logger.info(f"Directories {directories}")
         logger.info(f"Final params for DP3 command: {params}")
         params_path = dict_to_parset(params)
         cmd = ["DP3", str(params_path)]
@@ -269,16 +258,20 @@ class DP3Step:
 
         logger.info(f"DP3 execution stdout: {stdout if stdout else 'No Output'}")
         logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
-        """
-        for key, val in upload_directories.items():
-            output_path = PosixPath(params[key])
-            logger.info(f"Checking existence of output path: {output_path}")
-            if output_path.exists():
-                logger.info(f"Path exists, proceeding to zip: {output_path}")
+
+        #TODO: Remove directories dict, it can be only an array
+        for key, val in directories.items():
+            logger.info(f"Checking existence of output path: {key}")
+            if key.exists():
+                logger.info(f"Path exists, proceeding to zip: {key}")
                 try:
-                    zip_path = data_source.zip_without_compression(output_path)
+                    logger.info(f"Going to zip {key}")
+                    zip_path = data_source.zip_without_compression(key)
                     logger.info(f"Zip created at {zip_path}, uploading to S3")
-                    data_source.upload_file(zip_path, val, id=id)
+                    data_source.upload_file(zip_path, local_path_to_s3(zip_path))
+                    logger.info(
+                        f"Uploaded zip file to S3: {local_path_to_s3(zip_path)}"
+                    )
                 except IsADirectoryError as e:
                     logger.error(f"Error while zipping: {e}")
             else:
@@ -289,8 +282,6 @@ class DP3Step:
             f"Worker id: {id} completed execution. Time records: {time_records}"
         )
         return time_records
-        
-        """
 
     def _execute_step(self, id, *args, **kwargs):
         memory_limit = get_memory_limit_cgroupv2()
@@ -348,9 +339,21 @@ class DP3Step:
 
         function_params = []
         for key in keys:
+            key_name = key.split("/")[-1].split(".")[0]
             new_parameters = self._parameters.copy()
             new_parameters["msin"] = InputS3(bucket=bucket, key=key)
+            # Modify OutputS3's to add the key of InputS3
+            logger.info(key_name)
+            for k, v in new_parameters.items():
+                if isinstance(v, OutputS3):
+                    new_parameters[k] = OutputS3(
+                        bucket=v.bucket,
+                        key=f"{v.key}",
+                        file_ext=v.file_ext,
+                        file_name=key_name,
+                    )
             function_params.append(pickle.dumps(new_parameters))
+
         logger.info(keys)
         logger.info(function_params)
         # Get size of the first chunk in the list, that will be the chunk size
