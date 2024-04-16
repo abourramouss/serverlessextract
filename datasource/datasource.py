@@ -33,11 +33,11 @@ class InputS3:
 
 
 class OutputS3:
-    def __init__(self, bucket: str, key: str, file_ext=None, separate_dir=False):
+    def __init__(self, bucket: str, key: str, file_ext=None, file_name=None):
         self._bucket = bucket
         self._key = key
         self._file_ext = file_ext
-        self._separate_dir = separate_dir
+        self._file_name = file_name
 
     @property
     def bucket(self):
@@ -56,15 +56,18 @@ class OutputS3:
         self._key = value
 
     @property
+    def file_name(self):
+        return self._file_name
+
+    @property
     def file_ext(self):
         return self._file_ext
 
-    @property
-    def separate_dir(self):
-        return self._separate_dir
+    def __str__(self) -> str:
+        return f"/{self._bucket}/{self._key}/{self._file_name}.{self._file_ext}"
 
-    def __str__(self):
-        return f"/{self._bucket}/{self._key}"
+    def __repr__(self) -> str:
+        return f"OutputS3(bucket={self._bucket}, key={self._key}, file_ext={self._file_ext})"
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -92,7 +95,7 @@ class DataSource(ABC):
 
     def zip_without_compression(self, ms: PosixPath) -> PosixPath:
         print(f"Zipping directory: {ms}")
-        zip_filepath = ms.with_suffix(".zip")
+        zip_filepath = ms.with_name(ms.name + ".zip")
 
         if zip_filepath.exists() and zip_filepath.is_dir():
             raise IsADirectoryError(

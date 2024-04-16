@@ -33,9 +33,7 @@ rebinning_params = {
     "avg.freqstep": 4,
     "avg.timestep": 8,
     "msout": OutputS3(
-        bucket="ayman-extract",
-        key="extract-data/rebinning_out",
-        file_ext=".ms",
+        bucket="ayman-extract", key="extract-data/rebinning_out", file_ext="ms"
     ),
 }
 
