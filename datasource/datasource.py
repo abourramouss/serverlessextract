@@ -5,6 +5,11 @@ from s3path import S3Path
 import zipfile
 import os
 import shutil
+import logging
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 class InputS3:
@@ -94,27 +99,39 @@ class DataSource(ABC):
                 f.write(f"{key}={value}\n")
 
     def zip_without_compression(self, ms: PosixPath) -> PosixPath:
-        print(f"Zipping directory: {ms}")
+        logging.info(f"Starting zipping process for: {ms}")
         zip_filepath = ms.with_name(ms.name + ".zip")
 
         if zip_filepath.exists() and zip_filepath.is_dir():
+            logging.error(
+                f"Cannot create a zip file as a directory with the name {zip_filepath} exists."
+            )
             raise IsADirectoryError(
                 f"Cannot create a zip file as a directory with the name {zip_filepath} exists."
             )
 
-        with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_STORED) as zipf:
-            for root, dirs, files in os.walk(ms):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, start=ms.parent)
-                    zipf.write(file_path, arcname=arcname)
+        if ms.is_dir():
+            with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_STORED) as zipf:
+                for root, dirs, files in os.walk(ms):
+                    for file in files:
+                        file_path = PosixPath(root) / file
+                        arcname = file_path.relative_to(ms)
+                        zipf.write(file_path, arcname)
+        elif ms.is_file():
+            with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_STORED) as zipf:
+                arcname = ms.name
+                zipf.write(ms, arcname)
+        else:
+            logging.error(f"{ms} is neither a file nor a directory.")
+            raise FileNotFoundError(f"No such file or directory: {ms}")
 
-        print(f"Created zip file at {zip_filepath}")
+        logging.info(f"Created zip file at {zip_filepath}")
         return zip_filepath
 
     def unzip(self, ms: PosixPath) -> PosixPath:
-        print(f"Extracting zip file at {ms}")
+        logging.info(f"Extracting zip file at {ms}")
         if ms.suffix != ".zip":
+            logging.error(f"Expected a .zip file, got {ms}")
             raise ValueError(f"Expected a .zip file, got {ms}")
 
         extract_path = ms.parent / ms.stem
@@ -122,7 +139,17 @@ class DataSource(ABC):
             extract_path.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(ms, "r") as zipf:
-            zipf.extractall(extract_path)
-
-        print(f"Extracted to: {extract_path}")
+            zip_contents = zipf.namelist()
+            logging.debug(f"Zip contents: {zip_contents}")
+            if (
+                len(zip_contents) == 1
+                and PosixPath(zip_contents[0]).name == zip_contents[0]
+            ):
+                single_file_path = extract_path / zip_contents[0]
+                zipf.extract(zip_contents[0], extract_path)
+                logging.info(f"Extracted single file to: {single_file_path}")
+                return single_file_path
+            else:
+                zipf.extractall(extract_path)
+                logging.info(f"Extracted to directory: {extract_path}")
         return extract_path

@@ -216,10 +216,12 @@ class DP3Step:
                     f"Downloaded path type: {'Directory' if path.is_dir() else 'File'} at {path}"
                 )
 
+                logger.info(
+                    f"Checking path: {path}, Type: {type(path)}, Exists: {path.exists()}, Is File: {path.is_file()}"
+                )
+
                 if path.is_dir():
-                    logger.info(
-                        f"Path {path} is a directory. Contents: {os.listdir(path)}"
-                    )
+                    logger.info(f"Path {path} is a directory")
                 elif path.is_file():
                     logger.info(f"Path {path} is a file with extension {path.suffix}")
                     if path.suffix.lower() == ".zip":
@@ -231,8 +233,17 @@ class DP3Step:
                     else:
                         logger.info(f"Path {path} is a recognized file type.")
                 else:
+                    # TODO: Handle case where h5 file isn't related to msin
                     logger.warning(
                         f"Path {path} is neither a directory nor a recognized file type."
+                    )
+                    logger.info(
+                        f"File status - Exists: {os.path.exists(path)}, Is File: {os.path.isfile(path)}"
+                    )
+                    logger.info(
+                        os.listdir(
+                            "/tmp/ayman-extract/extract-data/calibration_out/h5/"
+                        )
                     )
 
                 params[key] = str(path)
@@ -247,7 +258,7 @@ class DP3Step:
                 logger.info(f"Output path prepared: {final_output_path}")
                 # TODO: Add the parameters or whatever at the end, basically compose the key correctly
                 directories[final_output_path] = val
-                params[key] = final_output_path
+                params[key] = str(final_output_path)
                 logger.info(f"Directories {directories}")
         logger.info(f"Final params for DP3 command: {params}")
         params_path = dict_to_parset(params)
@@ -259,14 +270,15 @@ class DP3Step:
         logger.info(f"DP3 execution stdout: {stdout if stdout else 'No Output'}")
         logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
 
-        #TODO: Remove directories dict, it can be only an array
+        # TODO: Remove directories dict, it can be only an array
         for key, val in directories.items():
             logger.info(f"Checking existence of output path: {key}")
-            if key.exists():
+            if os.path.exists(key):
                 logger.info(f"Path exists, proceeding to zip: {key}")
                 try:
                     logger.info(f"Going to zip {key}")
                     zip_path = data_source.zip_without_compression(key)
+
                     logger.info(f"Zip created at {zip_path}, uploading to S3")
                     data_source.upload_file(zip_path, local_path_to_s3(zip_path))
                     logger.info(
@@ -275,7 +287,8 @@ class DP3Step:
                 except IsADirectoryError as e:
                     logger.error(f"Error while zipping: {e}")
             else:
-                logger.error(f"Expected output path does not exist: {output_path}")
+                # Do something else in here
+                logger.error(f"Path {key} does not exist. Skipping zipping.")
 
         time_records = []
         logger.info(
