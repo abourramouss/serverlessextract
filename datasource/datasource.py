@@ -13,9 +13,10 @@ logging.basicConfig(
 
 
 class InputS3:
-    def __init__(self, bucket: str, key: str):
+    def __init__(self, bucket: str, key: str, dynamic: bool = False):
         self._bucket = bucket
         self._key = key
+        self.dynamic = dynamic
 
     @property
     def bucket(self):

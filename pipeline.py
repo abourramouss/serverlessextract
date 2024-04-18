@@ -18,7 +18,6 @@ logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:
 logger = logging.getLogger(__name__)
 
 """
-
 rebinning_params = {
     "msin": InputS3(
         bucket="ayman-extract",
@@ -47,9 +46,8 @@ end_time = time.time()
 
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 
+"""
 
-"""
-"""
 
 calibration_params = {
     "msin": InputS3(
@@ -78,7 +76,7 @@ calibration_params = {
     "numthreads": 4,
     "msout": OutputS3(
         bucket="ayman-extract",
-        key="extract-data/calibration_out/ms",
+        key="extract-data/apply_cal/ms",
         file_ext="ms",
     ),
 }
@@ -91,17 +89,9 @@ end_time = time.time()
 logger.info(f"Calibration completed in {end_time - start_time} seconds.")
 
 
-"""
-# TODO: h5 and and ms are stored on the same thing, outputs3 returns multiple keys
-
 substraction = {
-    "msin": InputS3(bucket="ayman-extract", key="extract-data/calibration_out/ms"),
+    "msin": InputS3(bucket="ayman-extract", key="extract-data/apply_cal/ms"),
     "msin.datacolumn": "DATA",
-    "msout": OutputS3(
-        bucket="ayman-extract",
-        key="extract-data/substraction_out/ms",
-        file_ext="ms",
-    ),
     "msout.datacolumn": "SUBTRACTED_DATA",
     "steps": "[sub]",
     "sub.type": "h5parmpredict",
@@ -112,12 +102,17 @@ substraction = {
     "sub.directions": "[[CygA],[CasA]]",
     "sub.operation": "subtract",
     "sub.applycal.parmdb": InputS3(
-        bucket="ayman-extract", key="extract-data/calibration_out/h5/partition_1.h5"
+        bucket="ayman-extract", key="extract-data/calibration_out/h5", dynamic=True
     ),
     "sub.applycal.steps": "[sub_apply_amp,sub_apply_phase]",
     "sub.applycal.correction": "fulljones",
     "sub.applycal.sub_apply_amp.correction": "amplitude000",
     "sub.applycal.sub_apply_phase.correction": "phase000",
+    "msout": OutputS3(
+        bucket="ayman-extract",
+        key="extract-data/apply_cal/ms",
+        file_ext="ms",
+    ),
 }
 
 
@@ -126,3 +121,31 @@ finished_job = DP3Step(parameters=substraction).run(func_limit=1)
 end_time = time.time()
 
 logger.info(f"Substraction completed in {end_time - start_time} seconds.")
+
+
+apply_calibration = {
+    "msin": InputS3(bucket="ayman-extract", key="extract-data/apply_cal/ms"),
+    "msin.datacolumn": "SUBTRACTED_DATA",
+    "msout": OutputS3(
+        bucket="ayman-extract",
+        key="extract-data/apply_cal/ms",
+        file_ext="ms",
+    ),
+    "msout.datacolumn": "CORRECTED_DATA",
+    "steps": "[apply]",
+    "apply.type": "applycal",
+    "apply.steps": "[apply_amp,apply_phase]",
+    "apply.apply_amp.correction": "amplitude000",
+    "apply.apply_phase.correction": "phase000",
+    "apply.direction": "[Main]",
+    "apply.parmdb": InputS3(
+        bucket="ayman-extract", key="extract-data/calibration_out/h5", dynamic=True
+    ),
+}
+
+
+start_time = time.time()
+finished_job = DP3Step(parameters=apply_calibration).run(func_limit=1)
+end_time = time.time()
+
+logger.info(f"Apply Calibration completed in {end_time - start_time} seconds.")
