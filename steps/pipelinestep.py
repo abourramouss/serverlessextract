@@ -7,7 +7,7 @@ import logging
 import subprocess as sp
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Dict, List, Union, Optional
 from s3path import S3Path
 from pathlib import PosixPath
 from profiling import profiling_context, Job, detect_runtime_environment
@@ -194,13 +194,10 @@ class PipelineStep(ABC):
 
 
 class DP3Step:
-    def __init__(
-        self,
-        parameters: Dict,
-    ):
+    def __init__(self, parameters: Union[Dict, List[Dict]]):
         self._parameters = parameters
 
-    def execute_step(self, parameters: bytes, id):
+    def execute_step(self, parameters: List[bytes], id):
         working_dir = PosixPath(os.getenv("HOME"))
         data_source = LithopsDataSource()
 
@@ -227,9 +224,6 @@ class DP3Step:
                     if path.suffix.lower() == ".zip":
                         logger.info(f"Extracting zip file at {path}")
                         path = data_source.unzip(path)
-                        logger.info(
-                            f"Extracted path: {path}, Contents: {os.listdir(path)}"
-                        )
                     else:
                         logger.info(f"Path {path} is a recognized file type.")
                 else:
@@ -239,11 +233,6 @@ class DP3Step:
                     )
                     logger.info(
                         f"File status - Exists: {os.path.exists(path)}, Is File: {os.path.isfile(path)}"
-                    )
-                    logger.info(
-                        os.listdir(
-                            "/tmp/ayman-extract/extract-data/calibration_out/h5/"
-                        )
                     )
 
                 params[key] = str(path)
@@ -365,6 +354,25 @@ class DP3Step:
                         file_ext=v.file_ext,
                         file_name=key_name,
                     )
+                elif isinstance(v, InputS3) and v.dynamic:
+                    dynamic_key_prefix = f"{v.key}/{key_name}"
+                    dynamic_keys = lithops.Storage().list_keys(
+                        bucket=v.bucket, prefix=dynamic_key_prefix
+                    )
+                    if len(dynamic_keys) == 1:
+                        chosen_key = dynamic_keys[0]
+                        new_parameters[k] = InputS3(
+                            bucket=v.bucket, key=chosen_key, dynamic=True
+                        )
+                    elif len(dynamic_keys) > 1:
+                        raise Exception(
+                            f"Multiple keys found for a supposed unique dynamic path: {dynamic_keys}"
+                        )
+                    else:
+                        raise Exception(
+                            f"No valid key found for dynamic path prefix {dynamic_key_prefix}"
+                        )
+
             function_params.append(pickle.dumps(new_parameters))
 
         logger.info(keys)
