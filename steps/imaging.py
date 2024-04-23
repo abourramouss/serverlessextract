@@ -1,7 +1,6 @@
 from pathlib import PosixPath
 from typing import Dict, List, Optional
 from s3path import S3Path
-from .pipelinestep import PipelineStep
 from datasource import LithopsDataSource
 from profiling import profiling_context, Job, detect_runtime_environment
 from util import dict_to_parset
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 logger.propagate = True
 
 
-class ImagingStep(PipelineStep):
+class ImagingStep:
     def __init__(
         self,
         input_data_path: Dict[str, S3Path],
