@@ -1,13 +1,8 @@
 import time
 import logging
-from steps.rebinning import RebinningStep
-from steps.calibration import CalibrationStep, SubstractionStep, ApplyCalibrationStep
 from steps.imaging import ImagingStep
-from steps.agg_cal import CalibrationSubstractionApplyCalibrationStep
 from steps.pipelinestep import DP3Step
-from s3path import S3Path
-from profiling import JobCollection
-from lithops import Storage
+
 from datasource import InputS3, OutputS3
 
 
@@ -17,7 +12,7 @@ log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s
 logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
 
-"""
+
 rebinning_params = {
     "msin": InputS3(
         bucket="ayman-extract",
@@ -46,8 +41,6 @@ end_time = time.time()
 
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 
-
-"""
 
 calibration_params = {
     "msin": InputS3(
@@ -108,6 +101,11 @@ substraction = {
         bucket="ayman-extract",
         key="extract-data/applycal_out/ms",
         file_ext="ms",
+    ),
+    "stdout": OutputS3(
+        bucket="ayman-extract",
+        key="extract-data/applycal_out/stdout",
+        file_ext="txt",
     ),
 }
 
