@@ -66,7 +66,7 @@ class DP3Step:
         else:
             self._parameters = parameters
 
-    def execute_step(self, parameters: bytes, id):
+    def execute_step(self, parameters: bytes, id=None):
         working_dir = PosixPath(os.getenv("HOME"))
         data_source = LithopsDataSource()
 
@@ -91,8 +91,8 @@ class DP3Step:
                 elif path.is_file():
                     logger.info(f"Path {path} is a file with extension {path.suffix}")
                     if path.suffix.lower() == ".zip":
-                        logger.info(f"Extracting zip file at {path}")
                         path = data_source.unzip(path)
+                        logger.info(f"Extracting zip file at {path}")
                     else:
                         logger.info(f"Path {path} is a recognized file type.")
                 else:
@@ -154,28 +154,22 @@ class DP3Step:
         )
         return time_records
 
-    def _execute_step(self, id, *args, **kwargs):
+    def _execute_step(self, id, command_args, *args, **kwargs):
         memory_limit = get_memory_limit_cgroupv2()
         cpu_limit = get_cpu_limit_cgroupv2()
 
         logger.info(f"Memory Limit: {memory_limit} GB")
         logger.info(f"CPU Limit: {cpu_limit}")
         logger.info(f"Worker {id} executing step")
-        logger.info(f"kwargs: {kwargs} args: {args}")
-        if "args" in kwargs and isinstance(kwargs["args"], tuple):
-            command_args = kwargs["args"]
-        else:
-            raise ValueError("Expected 'args' key with a tuple value in kwargs")
+        logger.info(f"Command args: {command_args}")
 
-        list_of_args = pickle.loads(command_args)
-
-        for arg in list_of_args:
-            logger.info(f"argument: {arg}")
         with profiling_context(os.getpid()) as profiler:
-            logger.info(f"commands args: {command_args}")
-            for arg in command_args:
-                logger.info(f"argument: {arg}")
-            function_timers = []  # self.execute_step(*command_args, id=id)
+            for params in command_args:
+                logger.info(f"Processing params: {params}")
+                params = pickle.dumps(params)
+                logger.info(f"Serialized params: {params}")
+                self.execute_step(params, id=id)
+            function_timers = []
 
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -185,13 +179,6 @@ class DP3Step:
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
     def run(self, func_limit: Optional[int] = None):
-        # provisioning_layer = ProvisioningLayer()
-        # previous_execution_data = self._collect_previous_execution_data()
-        # optimal_parameters = provisioning_layer.get_optimal_parameters(
-        #    self.input_data_path, previous_execution_data
-        # )
-
-        # Hardcoded optimal parameters for testing
         runtime_memory = 4000
         cpus_per_worker = 2
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
@@ -201,60 +188,58 @@ class DP3Step:
             log_level="INFO",
         )
 
-        # Use the first set's 'msin' for determining the bucket and prefix
+        # Get bucket and prefix from the first set of parameters
         bucket = self._parameters[0]["msin"].bucket
         prefix = self._parameters[0]["msin"].key
         keys = lithops.Storage().list_keys(bucket=bucket, prefix=prefix)
         if func_limit:
             keys = keys[:func_limit]
 
+        logger.info(keys)
         chunk_size = f"{int(lithops.Storage().head_object(bucket, keys[0])['content-length']) / 1024 ** 2} MB"
 
-        function_params = []
+        grouped_params = {}
         for key in keys:
-            key_name = key.split("/")[-1].split(".")[0]
+            partition_name = key.split("/")[-1].split(".")[0]
+            key_name = key.split("/")[-1]  # Use the full file name as the key name
+            all_params_for_key = []
             for params in self._parameters:
                 new_params = params.copy()
-                new_params["msin"] = InputS3(
-                    bucket=bucket, key=key
-                )  # Update msin for all parameter sets
+                new_key = (
+                    f"{params['msin'].key}/{key_name}"
+                    if not params["msin"].key.endswith("/")
+                    else f"{params['msin'].key}{key_name}"
+                )
+                new_params["msin"] = InputS3(bucket=bucket, key=new_key)
                 for k, v in new_params.items():
                     if isinstance(v, OutputS3):
                         new_params[k] = OutputS3(
                             bucket=v.bucket,
                             key=f"{v.key}",
                             file_ext=v.file_ext,
-                            file_name=key_name,
+                            file_name=partition_name,
                         )
                     elif isinstance(v, InputS3) and v.dynamic:
-                        dynamic_key_prefix = f"{v.key}/{key_name}"
-                        dynamic_keys = lithops.Storage().list_keys(
-                            bucket=v.bucket, prefix=dynamic_key_prefix
+                        dynamic_key_prefix = f"{v.key}/{partition_name}.{v.file_ext}"
+                        new_params[k] = InputS3(
+                            bucket=v.bucket,
+                            key=dynamic_key_prefix,
                         )
-                        if len(dynamic_keys) == 1:
-                            new_params[k] = InputS3(
-                                bucket=v.bucket, key=dynamic_keys[0], dynamic=True
-                            )
-                        elif len(dynamic_keys) > 1:
-                            raise Exception(
-                                "Multiple keys found for a supposed unique dynamic path."
-                            )
-                        else:
-                            raise Exception(
-                                "No valid key found for dynamic path prefix."
-                            )
+                        logger.info(new_params[k])
 
+                all_params_for_key.append(new_params)
+
+            grouped_params[key] = all_params_for_key
+
+        function_params = [grouped_params[key] for key in keys]
+        for params in function_params:
+            for new_params in params:
                 formatted_params = pprint.pformat(new_params, indent=4)
                 logger.info(f"Parameters for key {key_name}: \n{formatted_params}")
-                function_params.append(new_params)
 
-        logger.info("Processed keys: {}".format([key for key in keys]))
-        logger.info("Function parameters prepared for execution.")
-
-        params_to_send = pickle.dumps(function_params)
         start_time = time.time()
         futures = function_executor.map(
-            self._execute_step, params_to_send, extra_env=extra_env
+            self._execute_step, function_params, extra_env=extra_env
         )
         results = function_executor.get_result(futures)
         end_time = time.time()
