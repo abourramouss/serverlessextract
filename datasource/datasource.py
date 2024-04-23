@@ -13,9 +13,13 @@ logging.basicConfig(
 
 
 class InputS3:
-    def __init__(self, bucket: str, key: str, dynamic: bool = False):
+    def __init__(
+        self, bucket: str, key: str, file_ext: str = None, dynamic: bool = False
+    ):
         self._bucket = bucket
         self._key = key
+        self._file_ext = file_ext
+
         self.dynamic = dynamic
 
     @property
@@ -30,16 +34,23 @@ class InputS3:
     def key(self):
         return self._key
 
+    @property
+    def file_ext(self):
+        return self._file_ext
+
     @key.setter
     def key(self, value):
         self._key = value
 
     def __str__(self):
-        return f"/{self._bucket}/{self._key}"
+        return f"/{self._bucket}/{self._key}.{self._file_ext}"
+
+    def __repr__(self) -> str:
+        return f"InputS3(bucket={self._bucket}, key={self._key}, file_ext={self._file_ext})"
 
 
 class OutputS3:
-    def __init__(self, bucket: str, key: str, file_ext=None, file_name=None):
+    def __init__(self, bucket: str, key: str, file_ext: str = None, file_name=None):
         self._bucket = bucket
         self._key = key
         self._file_ext = file_ext

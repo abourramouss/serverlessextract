@@ -17,7 +17,6 @@ log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s
 logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
 
-
 """
 rebinning_params = {
     "msin": InputS3(
@@ -46,6 +45,8 @@ end_time = time.time()
 
 
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
+
+
 """
 
 calibration_params = {
@@ -94,7 +95,10 @@ substraction = {
     "sub.directions": "[[CygA],[CasA]]",
     "sub.operation": "subtract",
     "sub.applycal.parmdb": InputS3(
-        bucket="ayman-extract", key="extract-data/applycal_out/h5", dynamic=True
+        bucket="ayman-extract",
+        key="extract-data/applycal_out/h5",
+        dynamic=True,
+        file_ext="h5",
     ),
     "sub.applycal.steps": "[sub_apply_amp,sub_apply_phase]",
     "sub.applycal.correction": "fulljones",
@@ -124,7 +128,10 @@ apply_calibration = {
     "apply.apply_phase.correction": "phase000",
     "apply.direction": "[Main]",
     "apply.parmdb": InputS3(
-        bucket="ayman-extract", key="extract-data/applycal_out/h5", dynamic=True
+        bucket="ayman-extract",
+        key="extract-data/applycal_out/h5",
+        dynamic=True,
+        file_ext="h5",
     ),
 }
 
