@@ -13,6 +13,7 @@ logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:
 logger = logging.getLogger(__name__)
 
 
+"""
 rebinning_params = {
     "msin": InputS3(
         bucket="ayman-extract",
@@ -40,7 +41,6 @@ end_time = time.time()
 
 
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
-
 
 calibration_params = {
     "msin": InputS3(
@@ -110,6 +110,26 @@ substraction = {
 }
 
 
+
+
+
+agg_cal = [calibration_params, substraction, apply_calibration]
+
+start_time = time.time()
+finished_job = DP3Step(parameters=agg_cal).run(func_limit=1)
+end_time = time.time()
+
+logger.info(f"Calibration completed in {end_time - start_time} seconds.")
+
+
+
+
+
+
+"""
+
+# Imaging
+
 apply_calibration = {
     "msin": InputS3(bucket="ayman-extract", key="extract-data/applycal_out/ms"),
     "msin.datacolumn": "SUBTRACTED_DATA",
@@ -132,12 +152,46 @@ apply_calibration = {
         file_ext="h5",
     ),
 }
-
-
-agg_cal = [calibration_params, substraction, apply_calibration]
+imaging_params = [
+    "-size",
+    "1024",
+    "1024",
+    "-pol",
+    "I",
+    "-scale",
+    "5arcmin",
+    "-niter",
+    "100000",
+    "-gain",
+    "0.1",
+    "-mgain",
+    "0.6",
+    "-auto-mask",
+    "5",
+    "-local-rms",
+    "-multiscale",
+    "-no-update-model-required",
+    "-make-psf",
+    "-auto-threshold",
+    "3",
+    "-weight",
+    "briggs",
+    "0",
+    "-data-column",
+    "CORRECTED_DATA",
+    "-nmiter",
+    "0",
+    "-name",
+    "/tmp/Cygloop-205-210-b0-1024",
+]
 
 start_time = time.time()
-finished_job = DP3Step(parameters=agg_cal).run(func_limit=1)
-end_time = time.time()
+finished_job = ImagingStep(
+    input_data_path=InputS3(bucket="ayman-extract", key="extract-data/applycal_out/ms"),
+    parameters=imaging_params,
+    output=OutputS3(
+        bucket="ayman-extract", key="extract-data/imaging_out/", file_ext="fits"
+    ),
+).run()
 
-logger.info(f"Apply Calibration completed in {end_time - start_time} seconds.")
+

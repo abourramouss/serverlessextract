@@ -23,7 +23,9 @@ class ImagingStep:
         parameters: Dict,
         output: Optional[Dict[str, S3Path]] = None,
     ):
-        super().__init__(input_data_path, parameters, output)
+        self._input_data_path = input_data_path
+        self._parameters = parameters
+        self._output = output
 
     @property
     def input_data_path(self) -> List[S3Path]:
@@ -37,14 +39,13 @@ class ImagingStep:
     def output(self) -> S3Path:
         return self._output
 
-    def execute_step(self, ms: List[S3Path], parameters: str, output_ms: S3Path, cpus):
+    def execute_step(self, ms: List[S3Path], parameters: bytes, output_ms: S3Path):
         working_dir = PosixPath(os.getenv("HOME"))
         time_records = []
         data_source = LithopsDataSource()
-
+        params = pickle.loads(parameters)
         # Initialize an empty list to store partition paths
         partitions = []
-
         for partition in ms:
             partition_path = time_it(
                 "download_ms", data_source.download_directory, time_records, partition
@@ -57,44 +58,13 @@ class ImagingStep:
 
         cmd = [
             "wsclean",
-            "-j",
-            str(cpus),
-            "-size",
-            "1024",
-            "1024",
-            "-pol",
-            "I",
-            "-scale",
-            "5arcmin",
-            "-niter",
-            "100000",
-            "-gain",
-            "0.1",
-            "-mgain",
-            "0.6",
-            "-auto-mask",
-            "5",
-            "-local-rms",
-            "-multiscale",
-            "-no-update-model-required",
-            "-make-psf",
-            "-auto-threshold",
-            "3",
-            "-weight",
-            "briggs",
-            "0",
-            "-data-column",
-            "CORRECTED_DATA",
-            "-nmiter",
-            "0",
-            "-name",
-            "/tmp/Cygloop-205-210-b0-1024",
         ]
 
+        cmd.extend(params)
         # Append the paths of all partitions to the command
         cmd.extend(partitions)
 
-        logger.info(cmd)
+        logger.info(f"cmd: {cmd}")
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
         stdout, stderr = proc.communicate()
@@ -127,13 +97,12 @@ class ImagingStep:
         ms = kwargs["kwargs"]["ms"]
         parameters = kwargs["kwargs"]["parameters"]
         output_ms = kwargs["kwargs"]["output_ms"]
-        cpus = kwargs["kwargs"]["cpus"]
 
         print(f"Worker executing step with {len(ms)} ms paths")
 
         # Call the actual execution step
         with profiling_context(os.getpid()) as profiler:
-            function_timers = self.execute_step(ms, parameters, output_ms, cpus)
+            function_timers = self.execute_step(ms, parameters, output_ms)
 
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -154,25 +123,30 @@ class ImagingStep:
             runtime_memory=runtime_memory,
             runtime_cpu=cpus_per_worker,
         )
+
         keys = lithops.Storage().list_keys(
-            bucket=self.input_data_path.bucket,
-            prefix=f"{self.input_data_path.key}/",
+            bucket=self._input_data_path.bucket,
+            prefix=f"{self._input_data_path.key}/",
         )
 
-        if f"{self.input_data_path.key}/" in keys:
+        if f"{self._input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
         if func_limit:
             keys = keys[:func_limit]
 
         ms = [
-            S3Path.from_bucket_key(bucket=self.input_data_path.bucket, key=partition)
+            S3Path.from_bucket_key(bucket=self._input_data_path.bucket, key=partition)
             for partition in keys
         ]
 
-        chunk_size = f"{lithops.Storage().head_object(self.input_data_path.bucket, keys[0])['content-length']}/{1024**2}"
+        chunk_size = f"{lithops.Storage().head_object(self._input_data_path.bucket, keys[0])['content-length']}/{1024**2}"
 
-        parameters = (pickle.dumps(self.parameters),)
-        output_ms = self.output
+        self._parameters.extend(["-j", str(cpus_per_worker)])
+        parameters = pickle.dumps(self._parameters)
+        output_ms = self._output
+
+        # append the number of cpus to parameters
+
         start_time = time.time()
         future = function_executor.call_async(
             func=self._execute_step,
@@ -182,13 +156,12 @@ class ImagingStep:
                     "ms": ms,
                     "parameters": parameters,
                     "output_ms": output_ms,
-                    "cpus": cpus_per_worker,
                 },
             },
             extra_env=extra_env,
         )
 
-        logger.info(f"parameters: {self.parameters}")
+        logger.info(f"parameters: {self._parameters}")
 
         result = function_executor.get_result([future])
 
