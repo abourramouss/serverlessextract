@@ -98,15 +98,3 @@ class ProvisioningLayer:
         if cpu_per_gb >= 0.5:
             cpus_per_worker = int(cpu_per_gb)
         return cpus_per_worker
-
-
-if __name__ == "__main__":
-    provisioning_layer = ProvisioningLayer()
-    previous_execution_data = {
-        "execution_time": 200,
-    }
-    optimal_parameters = provisioning_layer.get_optimal_parameters(
-        S3Path("/ayman-extract/partitions/partitions_7900_12zip"),
-        previous_execution_data,
-    )
-    print(optimal_parameters)

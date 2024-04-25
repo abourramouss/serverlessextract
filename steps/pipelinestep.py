@@ -3,7 +3,6 @@ import pickle
 import time
 import os
 import subprocess
-import logging
 import subprocess as sp
 import pprint
 
@@ -17,12 +16,7 @@ from datasource import (
     s3_to_local_path,
     local_path_to_s3,
 )
-from util import dict_to_parset
-
-log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger(__name__)
-logger.propagate = True
+from util import dict_to_parset, setup_logging
 
 
 def get_memory_limit_cgroupv2():
@@ -58,114 +52,122 @@ def get_cpu_limit_cgroupv2():
 
 
 class DP3Step:
-    def __init__(self, parameters: Union[Dict, List[Dict]]):
+    def __init__(self, parameters: List[Dict], log_level):
         if isinstance(parameters, dict):
             self._parameters = [parameters]
         else:
             self._parameters = parameters
+        self._log_level = log_level
+        self._logger = setup_logging(self._log_level)
+        self._logger.debug("DP3 Step initialized")
 
     def execute_step(self, parameters: bytes, id=None):
         working_dir = PosixPath(os.getenv("HOME"))
         data_source = LithopsDataSource()
 
         params = pickle.loads(parameters)
-        logger.info(f"Worker id: {id} started execution with parameters: {params}")
+        self._logger.info(
+            f"Worker id: {id} started execution with parameters: {params}"
+        )
 
         directories = {}
         for key, val in params.items():
             if isinstance(val, InputS3):
-                logger.info(f"Downloading data for key {key} from S3: {val}")
+                self._logger.info(f"Downloading data for key {key} from S3: {val}")
                 path = data_source.download_directory(val, working_dir)
-                logger.info(
+                self._logger.debug(
                     f"Downloaded path type: {'Directory' if path.is_dir() else 'File'} at {path}"
                 )
 
-                logger.info(
+                self._logger.debug(
                     f"Checking path: {path}, Type: {type(path)}, Exists: {path.exists()}, Is File: {path.is_file()}"
                 )
 
                 if path.is_dir():
-                    logger.info(f"Path {path} is a directory")
+                    self._logger.info(f"Path {path} is a directory")
                 elif path.is_file():
-                    logger.info(f"Path {path} is a file with extension {path.suffix}")
+                    self._logger.info(
+                        f"Path {path} is a file with extension {path.suffix}"
+                    )
                     if path.suffix.lower() == ".zip":
                         path = data_source.unzip(path)
-                        logger.info(f"Extracting zip file at {path}")
+                        self._logger.debug(f"Extracting zip file at {path}")
                     else:
-                        logger.info(f"Path {path} is a recognized file type.")
+                        self._logger.debug(f"Path {path} is a recognized file type.")
                 else:
                     # TODO: Handle case where h5 file isn't related to msin
-                    logger.warning(
+                    self._logger.warning(
                         f"Path {path} is neither a directory nor a recognized file type."
                     )
-                    logger.info(
+                    self._logger.debug(
                         f"File status - Exists: {os.path.exists(path)}, Is File: {os.path.isfile(path)}"
                     )
 
                 params[key] = str(path)
 
             elif isinstance(val, OutputS3):
-                logger.info(f"Preparing output path for key {key} using {val}")
+                self._logger.info(f"Preparing output path for key {key} using {val}")
                 local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
                 final_output_path = (
                     local_directory_path / f"{val.file_name}.{val.file_ext}"
                 )
                 os.makedirs(os.path.dirname(final_output_path), exist_ok=True)
-                logger.info(f"Output path prepared: {final_output_path}")
+                self._logger.debug(f"Output path prepared: {final_output_path}")
                 # TODO: Add the parameters or whatever at the end, basically compose the key correctly
                 directories[final_output_path] = val
                 params[key] = str(final_output_path)
-                logger.info(f"Directories {directories}")
-        logger.info(f"Final params for DP3 command: {params}")
+                self._logger.debug(f"Directories {directories}")
+        self._logger.debug(f"Final params for DP3 command: {params}")
         params_path = dict_to_parset(params)
         cmd = ["DP3", str(params_path)]
-        logger.info(f"Executing DP3 command with parameters: {cmd}")
+        self._logger.debug(f"Executing DP3 command with parameters: {cmd}")
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
         stdout, stderr = proc.communicate()
 
-        logger.info(f"DP3 execution stdout: {stdout if stdout else 'No Output'}")
-        logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
+        self._logger.info(f"DP3 execution stdout: {stdout if stdout else 'No Output'}")
+        self._logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
 
-        # TODO: Remove directories dict, it can be only an array
+        # TODO: Remove directories dict, it can be an array
         for key, val in directories.items():
-            logger.info(f"Checking existence of output path: {key}")
+            self._logger.debug(f"Checking existence of output path: {key}")
             if os.path.exists(key):
-                logger.info(f"Path exists, proceeding to zip: {key}")
+                self._logger.debug(f"Path exists, proceeding to zip: {key}")
                 try:
-                    logger.info(f"Going to zip {key}")
+                    self._logger.debug(f"Going to zip {key}")
                     zip_path = data_source.zip_without_compression(key)
 
-                    logger.info(f"Zip created at {zip_path}, uploading to S3")
+                    self._logger.debug(f"Zip created at {zip_path}, uploading to S3")
                     data_source.upload_file(zip_path, local_path_to_s3(zip_path))
-                    logger.info(
+                    self._logger.debug(
                         f"Uploaded zip file to S3: {local_path_to_s3(zip_path)}"
                     )
                 except IsADirectoryError as e:
-                    logger.error(f"Error while zipping: {e}")
+                    self._logger.error(f"Error while zipping: {e}")
             else:
                 # Do something else in here
-                logger.error(f"Path {key} does not exist. Skipping zipping.")
+                self._logger.error(f"Path {key} does not exist. Skipping zipping.")
 
         time_records = []
-        logger.info(
+        self._logger.info(
             f"Worker id: {id} completed execution. Time records: {time_records}"
         )
         return time_records
 
     def _execute_step(self, id, command_args, *args, **kwargs):
+        self._logger = setup_logging(self._log_level)
         memory_limit = get_memory_limit_cgroupv2()
         cpu_limit = get_cpu_limit_cgroupv2()
 
-        logger.info(f"Memory Limit: {memory_limit} GB")
-        logger.info(f"CPU Limit: {cpu_limit}")
-        logger.info(f"Worker {id} executing step")
-        logger.info(f"Command args: {command_args}")
+        self._logger.info(f"Memory Limit: {memory_limit} GB")
+        self._logger.info(f"CPU Limit: {cpu_limit}")
+        self._logger.info(f"Worker {id} executing step")
+        self._logger.info(f"Command args: {command_args}")
 
         with profiling_context(os.getpid()) as profiler:
             for params in command_args:
-                logger.info(f"Processing params: {params}")
+                self._logger.debug(f"Processing params: {params}")
                 params = pickle.dumps(params)
-                logger.info(f"Serialized params: {params}")
+                self._logger.debug(f"Serialized params: {params}")
                 self.execute_step(params, id=id)
             function_timers = []
 
@@ -173,7 +175,9 @@ class DP3Step:
         profiler.worker_id = id
 
         env, instance_type = detect_runtime_environment()
-        logger.info(f"Worker {id} finished step on {env} instance {instance_type}")
+        self._logger.info(
+            f"Worker {id} finished step on {env} instance {instance_type}"
+        )
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
     def run(self, func_limit: Optional[int] = None):
@@ -183,7 +187,7 @@ class DP3Step:
         function_executor = lithops.FunctionExecutor(
             runtime_memory=runtime_memory,
             runtime_cpu=cpus_per_worker,
-            log_level="INFO",
+            log_level=self._log_level,
         )
 
         # Get bucket and prefix from the first set of parameters
@@ -193,7 +197,7 @@ class DP3Step:
         if func_limit:
             keys = keys[:func_limit]
 
-        logger.info(keys)
+        self._logger.debug(keys)
         chunk_size = f"{int(lithops.Storage().head_object(bucket, keys[0])['content-length']) / 1024 ** 2} MB"
 
         grouped_params = {}
@@ -223,7 +227,6 @@ class DP3Step:
                             bucket=v.bucket,
                             key=dynamic_key_prefix,
                         )
-                        logger.info(new_params[k])
 
                 all_params_for_key.append(new_params)
 
@@ -233,7 +236,9 @@ class DP3Step:
         for params in function_params:
             for new_params in params:
                 formatted_params = pprint.pformat(new_params, indent=4)
-                logger.info(f"Parameters for key {key_name}: \n{formatted_params}")
+                self._logger.debug(
+                    f"Parameters for key {key_name}: \n{formatted_params}"
+                )
 
         start_time = time.time()
         futures = function_executor.map(
