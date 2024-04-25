@@ -4,14 +4,13 @@ from steps.imaging import ImagingStep
 from steps.pipelinestep import DP3Step
 
 from datasource import InputS3, OutputS3
+from util import setup_logging
+import logging
 
 
-log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d -- %(message)s"
-
-# Configure logging with the custom format
-logging.basicConfig(level=logging.INFO, format=log_format, datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger(__name__)
-
+# Logger setup
+LOG_LEVEL = logging.DEBUG
+logger = setup_logging(LOG_LEVEL)
 
 """
 rebinning_params = {
@@ -34,13 +33,6 @@ rebinning_params = {
     "numthreads": 4,
 }
 
-# TIME TAKEN WITHOUT SPECIFYING THREADS:50, 4 threads: 36
-start_time = time.time()
-finished_job = DP3Step(parameters=rebinning_params).run(func_limit=1)
-end_time = time.time()
-
-
-logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 
 calibration_params = {
     "msin": InputS3(
@@ -102,33 +94,8 @@ substraction = {
         key="extract-data/applycal_out/ms",
         file_ext="ms",
     ),
-    "stdout": OutputS3(
-        bucket="ayman-extract",
-        key="extract-data/applycal_out/stdout",
-        file_ext="txt",
-    ),
 }
 
-
-
-
-
-agg_cal = [calibration_params, substraction, apply_calibration]
-
-start_time = time.time()
-finished_job = DP3Step(parameters=agg_cal).run(func_limit=1)
-end_time = time.time()
-
-logger.info(f"Calibration completed in {end_time - start_time} seconds.")
-
-
-
-
-
-
-"""
-
-# Imaging
 
 apply_calibration = {
     "msin": InputS3(bucket="ayman-extract", key="extract-data/applycal_out/ms"),
@@ -152,6 +119,32 @@ apply_calibration = {
         file_ext="h5",
     ),
 }
+
+# TIME TAKEN WITHOUT SPECIFYING THREADS:50, 4 threads: 36
+start_time = time.time()
+finished_job = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL).run(
+    func_limit=1
+)
+end_time = time.time()
+
+
+logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
+
+
+agg_cal = [calibration_params, substraction, apply_calibration]
+
+start_time = time.time()
+finished_job = DP3Step(parameters=agg_cal, log_level=LOG_LEVEL).run(func_limit=1)
+end_time = time.time()
+
+logger.info(f"Calibration completed in {end_time - start_time} seconds.")
+
+
+# Imaging
+
+"""
+
+
 imaging_params = [
     "-size",
     "1024",
@@ -182,16 +175,21 @@ imaging_params = [
     "-nmiter",
     "0",
     "-name",
-    "/tmp/Cygloop-205-210-b0-1024",
+    OutputS3(
+        bucket="ayman-extract",
+        key="extract-data/imag_out/",
+    ),
 ]
 
+
 start_time = time.time()
+
 finished_job = ImagingStep(
     input_data_path=InputS3(bucket="ayman-extract", key="extract-data/applycal_out/ms"),
     parameters=imaging_params,
-    output=OutputS3(
-        bucket="ayman-extract", key="extract-data/imaging_out/", file_ext="fits"
-    ),
+    log_level=LOG_LEVEL,
 ).run()
 
+end_time = time.time()
 
+logger.info(f"Imaging completed in {end_time - start_time} seconds.")

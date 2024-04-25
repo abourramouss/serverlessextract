@@ -10,10 +10,10 @@ MB = KB * KB
 
 
 def s3_to_local_path(
-    s3_path: InputS3, base_local_dir: PosixPath = PosixPath("/tmp")
+    s3_path: "InputS3", base_local_dir: PosixPath = PosixPath("/tmp")
 ) -> PosixPath:
-    """Converts an S3Path to a local file path."""
-    local_path = os.path.join(base_local_dir, s3_path.bucket, s3_path.key)
+    local_path = os.path.join(base_local_dir, s3_path.bucket, f"{s3_path.key}/")
+
     return PosixPath(local_path)
 
 
@@ -69,7 +69,6 @@ class LithopsDataSource(DataSource):
     ):
         """Download a directory from S3 and returns the local path."""
         keys = self.storage.list_keys(read_path.bucket, prefix=read_path.key)
-        print(keys)
         local_directory_path = s3_to_local_path(
             read_path, base_local_dir=str(base_path)
         )
