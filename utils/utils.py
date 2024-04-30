@@ -5,6 +5,38 @@ import logging
 import sys
 
 
+def get_memory_limit_cgroupv2():
+    try:
+        output = (
+            sp.check_output(["cat", "/sys/fs/cgroup/memory.max"])
+            .decode("utf-8")
+            .strip()
+        )
+        if output == "max":
+            return "No limit"
+        memory_limit_gb = int(output) / (1024**3)
+        return memory_limit_gb
+    except Exception as e:
+        return str(e)
+
+
+def get_cpu_limit_cgroupv2():
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as f:
+            cpu_max = f.read().strip()
+            quota, period = cpu_max.split(" ")
+            quota = int(quota)
+            period = int(period)
+
+        if quota == -1:  # No limit
+            return "No limit"
+        else:
+            cpu_limit = quota / period
+            return cpu_limit
+    except Exception as e:
+        return str(e)
+
+
 def delete_all_in_cwd():
     cwd = os.getcwd()
     for filename in os.listdir(cwd):
