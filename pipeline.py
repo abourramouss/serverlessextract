@@ -26,7 +26,7 @@ def prepend_hash_to_key(base_key):
 # Input ms's are stored here
 inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
 
-# Where to store the output ms's
+# Where to store the output ms's after partitioning
 msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total/")
 
 existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
