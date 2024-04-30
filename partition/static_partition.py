@@ -1,61 +1,67 @@
 from casacore.tables import table
 import os
-import zipfile
 import concurrent.futures
-import io
 import shutil
-import time
-import json
-from lithops import Storage
 import numpy as np
-from datetime import datetime
+from datasource import LithopsDataSource, OutputS3, InputS3
+from pathlib import PosixPath
 
 MB = 1024 * 1024
 
 
-def zipdir(path, ziph):
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            ziph.write(
-                os.path.join(root, file),
-                os.path.relpath(os.path.join(root, file), os.path.join(path, "..")),
-            )
+def create_partition(i, start_row, end_row, ms, msout):
+    datasource = LithopsDataSource()
 
-
-def unzip_file(zip_filepath, dest_path):
-    with zipfile.ZipFile(zip_filepath, "r") as zip_ref:
-        zip_ref.extractall(dest_path)
-
-
-def create_partition(i, start_row, end_row, ms):
     print(f"Creating partition {i} with rows from {start_row} to {end_row - 1}...")
     partition = ms.selectrows(list(range(start_row, end_row)))
-    partition_name = f"partition_{i}.ms"
-    partition.copy(partition_name, deep=True)
+    partition_name = PosixPath(f"partition_{i}.ms")
+    partition.copy(str(partition_name), deep=True)
     partition.close()
 
     partition_size = get_dir_size(partition_name)
     print(f"Partition {i} created. Size before zip: {partition_size} bytes")
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_STORED) as zipf:
-        zipdir(partition_name, zipf)
+    zip_filepath = datasource.zip_without_compression(partition_name)
+    print(f"Partition {i} zipped at {zip_filepath}")
+
+    # Get the file size before deleting the file
+    zip_file_size = os.path.getsize(zip_filepath)
+    print(f"Zip file size: {zip_file_size} bytes")
+
+    datasource.upload_file(zip_filepath, msout)
+
+    os.remove(zip_filepath)
     shutil.rmtree(partition_name)
 
-    partition_file = f"partition_{i}.zip"
-    with open(partition_file, "wb") as file:
-        file.write(zip_buffer.getvalue())
+    print(f"Partition {i} uploaded.")
 
-    print(
-        f"Partition {i} zipped. Zip file size: {os.path.getsize(partition_file)} bytes"
-    )
-
-    return partition_file, partition_size
+    return zip_filepath, partition_size
 
 
-def partition_ms(ms_path, num_partitions):
-    print(f"Starting partitioning of {ms_path} into {num_partitions} partitions...")
-    ms = table(ms_path, ack=False)
+def partition_ms(msin, num_partitions, msout):
+    print(f"Starting partitioning of {msin} into {num_partitions} partitions...")
+
+    datasource = LithopsDataSource()
+    ms_to_part = datasource.download_directory(msin, PosixPath("/tmp"))
+
+    print(f"Downloaded files to: {ms_to_part}")
+    full_file_paths = [PosixPath(ms_to_part) / f for f in os.listdir(ms_to_part)]
+    print(f"Files ready to be processed: {full_file_paths}")
+
+    mss = []
+    for f_path in full_file_paths:
+        if not f_path.exists():
+            print(f"File not found: {f_path}")
+            continue
+        print(f"Processing file: {f_path}")
+        unzipped_ms = datasource.unzip(f_path)
+        print(f"Unzipped contents at: {unzipped_ms}")
+
+        ms_table = table(str(unzipped_ms), ack=False)
+        mss.append(ms_table)
+
+    ms = table(mss)
+
     ms_sorted = ms.sort("TIME")
     total_rows = ms_sorted.nrows()
     print(f"Total rows in the measurement set: {total_rows}")
@@ -82,7 +88,9 @@ def partition_ms(ms_path, num_partitions):
     partition_sizes = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(create_partition, info[0], info[1], info[2], ms_sorted)
+            executor.submit(
+                create_partition, info[0], info[1], info[2], ms_sorted, msout
+            )
             for info in partitions_info
         ]
         for future in concurrent.futures.as_completed(futures):
@@ -98,7 +106,7 @@ def partition_ms(ms_path, num_partitions):
     ms_sorted.close()
     print(f"Partitioning completed. {len(partition_sizes)} partitions created.")
 
-    return partition_sizes
+    return InputS3(bucket=msout.bucket, key=msout.key)
 
 
 def get_dir_size(start_path="."):
@@ -108,81 +116,3 @@ def get_dir_size(start_path="."):
             fp = os.path.join(dirpath, f)
             total_size += os.path.getsize(fp)
     return total_size
-
-
-def measure_and_save_results(
-    ms_path,
-    min_partitions,
-    max_partitions,
-    results_file,
-    bucket,
-    original_file_size,
-    extra_folder,
-    num_cpus,
-):
-    print(f"Starting measurement and saving results...")
-    storage = Storage()
-    s3_key = "partitions/partitions_7zip/partition_1.ms.zip"
-    print(f"Downloading {s3_key}...")
-    download_start_time = time.time()
-    storage.download_file(bucket, s3_key, "/home/ubuntu/partition_1.ms.zip")
-    download_end_time = time.time()
-    download_time = download_end_time - download_start_time
-    print(f"Download completed in {download_time} seconds.")
-
-    unzip_file("/home/ubuntu/partition_1.ms.zip", "/home/ubuntu/")
-    input_size = round(get_dir_size(ms_path) / MB)
-
-    existing_results = {}
-    if os.path.exists(results_file):
-        with open(results_file, "r") as file:
-            try:
-                existing_results = json.load(file)
-            except json.JSONDecodeError:
-                print(
-                    "Existing results file is empty or contains invalid JSON. Initializing to empty dictionary."
-                )
-
-    for num_partitions in range(min_partitions, max_partitions + 1):
-        print(f"Processing {num_partitions} partitions...")
-        start_time = time.time()
-        partition_sizes = partition_ms(
-            ms_path, num_partitions
-        )  # Retrieves sizes of created partitions
-        end_time = time.time()
-
-        execution_time = end_time - start_time
-        output_size = round(
-            sum(partition_sizes) / MB
-        )  # Sum the sizes of partitions directly
-
-        upload_time = time.time() - start_time - execution_time
-        total_time = download_time + execution_time + upload_time
-        result = {
-            "execution_timestamp": datetime.now().isoformat(),
-            "execution_time": execution_time,
-            "upload_time": upload_time,
-            "input_size": input_size,
-            "output_size": output_size,
-            "total_time": total_time,
-            "download_time": download_time,
-        }
-
-        cpus_key = str(num_cpus)
-        partitions_key = str(num_partitions)
-        if cpus_key not in existing_results:
-            existing_results[cpus_key] = {}
-        if partitions_key not in existing_results[cpus_key]:
-            existing_results[cpus_key][partitions_key] = []
-        existing_results[cpus_key][partitions_key].append(
-            result
-        )  # Append the new result to the existing results
-
-    with open(results_file, "w") as file:
-        json.dump(existing_results, file, indent=4)
-
-    s3_key = os.path.join(extra_folder, "results", results_file)
-    storage.upload_file(results_file, bucket, s3_key)
-    print(f"Results uploaded to {bucket}/{s3_key}")
-
-

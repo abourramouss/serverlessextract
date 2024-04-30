@@ -9,7 +9,7 @@ import lithops
 import pickle
 import subprocess as sp
 import time
-from util import setup_logging
+from utils import setup_logging
 
 
 class ImagingStep:

@@ -2,11 +2,10 @@ import lithops
 import pickle
 import time
 import os
-import subprocess
 import subprocess as sp
 import pprint
 
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Optional
 from pathlib import PosixPath
 from profiling import profiling_context, Job, detect_runtime_environment
 from datasource import (
@@ -16,39 +15,13 @@ from datasource import (
     s3_to_local_path,
     local_path_to_s3,
 )
-from util import dict_to_parset, setup_logging
-
-
-def get_memory_limit_cgroupv2():
-    try:
-        output = (
-            subprocess.check_output(["cat", "/sys/fs/cgroup/memory.max"])
-            .decode("utf-8")
-            .strip()
-        )
-        if output == "max":
-            return "No limit"
-        memory_limit_gb = int(output) / (1024**3)
-        return memory_limit_gb
-    except Exception as e:
-        return str(e)
-
-
-def get_cpu_limit_cgroupv2():
-    try:
-        with open("/sys/fs/cgroup/cpu.max") as f:
-            cpu_max = f.read().strip()
-            quota, period = cpu_max.split(" ")
-            quota = int(quota)
-            period = int(period)
-
-        if quota == -1:  # No limit
-            return "No limit"
-        else:
-            cpu_limit = quota / period
-            return cpu_limit
-    except Exception as e:
-        return str(e)
+from utils import (
+    dict_to_parset,
+    setup_logging,
+    get_memory_limit_cgroupv2,
+    get_cpu_limit_cgroupv2,
+)
+from provisioning import OptimizedLithopsWrapper
 
 
 class DP3Step:
@@ -184,10 +157,12 @@ class DP3Step:
         runtime_memory = 4000
         cpus_per_worker = 2
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
-        function_executor = lithops.FunctionExecutor(
-            runtime_memory=runtime_memory,
-            runtime_cpu=cpus_per_worker,
-            log_level=self._log_level,
+        function_executor = OptimizedLithopsWrapper(
+            {
+                "runtime_memory": runtime_memory,
+                "runtime_cpu": cpus_per_worker,
+                "log_level": self._log_level,
+            }
         )
 
         # Get bucket and prefix from the first set of parameters
@@ -241,10 +216,10 @@ class DP3Step:
                 )
 
         start_time = time.time()
-        futures = function_executor.map(
+        self._logger.info(f"Starting step with {function_params} ")
+        results = function_executor.map(
             self._execute_step, function_params, extra_env=extra_env
         )
-        results = function_executor.get_result(futures)
         end_time = time.time()
 
         job = Job(
