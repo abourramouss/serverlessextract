@@ -23,21 +23,27 @@ def prepend_hash_to_key(base_key):
 
 
 # Create partitions beforehand from s3
+# Input ms's are stored here
 inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
+
+# Where to store the output ms's
 msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total/")
-partitioning_params = {
-    "msin": inputs,
-    "num_partitions": 10,
-    "msout": msout,
-}
-fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 
+existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
+if len(existing_keys) == 0:
+    lithops.Storage().list_keys()
+    partitioning_params = {
+        "msin": inputs,
+        "num_partitions": 10,
+        "msout": msout,
+    }
+    fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 
-future = fexec.call_async(partition_ms, partitioning_params)
+    future = fexec.call_async(partition_ms, partitioning_params)
 
-result = fexec.get_result()
-
-print(result)
+    result = fexec.get_result()
+else:
+    logger.info("Partitions already exist")
 
 
 # Rebinning parameters with hash included in the key as a root directory
