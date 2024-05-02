@@ -31,7 +31,6 @@ msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total/")
 
 existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
 if len(existing_keys) == 0:
-    lithops.Storage().list_keys()
     partitioning_params = {
         "msin": inputs,
         "num_partitions": 10,
