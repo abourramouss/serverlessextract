@@ -7,6 +7,7 @@ This repository provides guidance on configuring and utilizing a custom Docker r
 - Docker CE installed on your machine ([Installation Instructions](https://docs.docker.com/get-docker/))
 - Access to a Kubernetes cluster
 - A Docker Hub account or access to a private Docker registry
+- A minio object storage backend installed in your cluster.
 
 ## Configuration
 
@@ -32,6 +33,8 @@ minio:
     access_key_id: <your_access_key>
     secret_access_key: <your_secret_access_key>
 ```
+
+
 
 ## Building and Deploying Custom Runtime
 
@@ -68,10 +71,25 @@ import lithops
 fexec = lithops.FunctionExecutor(runtime='<your_docker_username>/custom_runtime:tag')
 ```
 
+## Preparing the data to run the workflows.
+
+The workflow needs measurement sets (an astronomy-specific format for datasets) for running the workflows.
+We recommend using small datasets with a small number of functions for developing and testing.
+
+The measurement sets can be found on https://share.obspm.fr/s/ezBfciEfmSs7Tqd?path=%2FDATA
+
+But we provide a small measurement set for testing that can be found at https://www.dropbox.com/scl/fi/0x6vmv8g4fwuepagbayvd/partition_01.ms.zip?rlkey=fctrkvt3at81q36qlvyvwhic7&st=17p2w6ae&dl=0
+
+This is an already partitioned measurement set that can be partitioned into smaller datasets if needed using the workflow.py file.
+
+The needed parameters for running the workflows are already defined, but there are file parameters, which are provided https://www.dropbox.com/scl/fi/it5n0x1l3d0wtq3n84aed/05-02-2024-11-20-41_files_list.zip?rlkey=5tt2j99ef445o8nm6heaarfk3&st=zmfzioxx&dl=0
+
+Modify the workflow.py parameters to point to the s3-like path where those file-like parameters can be found.
 ## Running Interferometry Workflows
 
-Once the custom runtime is deployed and configured, you can utilize the pipeline.py to execute the workflows
+Once the custom runtime is deployed and configured and the data is prepared, you can utilize the workflow.py to execute the workflow, the workflows to be executed are defined under that script.
 
-## Minio
+As a note, an input and output to a step is always a S3-path pointing to a directory, where it expects to find the data (a measurement set or multiple measurement sets).
 
-## Data to use for the demo
+
+
