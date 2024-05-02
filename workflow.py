@@ -43,7 +43,7 @@ if len(existing_keys) == 0:
 
     result = fexec.get_result()
 else:
-    logger.info("Partitions already exist")
+    logger.info("Partitions already exist, using them")
 
 
 # Rebinning parameters with hash included in the key as a root directory
