@@ -1,5 +1,4 @@
 from lithops import Storage, FunctionExecutor
-from datasource import InputS3
 
 
 class SimpleOptimizer:
