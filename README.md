@@ -7,7 +7,7 @@ This repository provides guidance on configuring and utilizing a custom Docker r
 - Docker CE installed on your machine ([Installation Instructions](https://docs.docker.com/get-docker/))
 - Access to a Kubernetes cluster
 - A Docker Hub account or access to a private Docker registry
-- A minio object storage backend installed in your cluster.
+- A object storage backend installed in your cluster, in our case we use Minio, but any backend compatible with lithops should work (https://lithops-cloud.github.io/docs/source/storage_backends.html) 
 
 ## Configuration
 
