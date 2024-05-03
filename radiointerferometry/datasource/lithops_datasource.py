@@ -1,9 +1,10 @@
-from lithops import Storage
 import os
+
+from lithops import Storage
 from .datasource import DataSource
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import PosixPath
-from datasource import InputS3, OutputS3
+from radiointerferometry.datasource import InputS3, OutputS3
 
 KB = 1024
 MB = KB * KB

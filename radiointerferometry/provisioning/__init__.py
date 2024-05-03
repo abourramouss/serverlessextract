@@ -1,1 +1,0 @@
-from .lithopswrapper import OptimizedLithopsWrapper, SimpleOptimizer

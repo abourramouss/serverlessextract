@@ -7,21 +7,25 @@ import pprint
 
 from typing import Dict, List, Optional
 from pathlib import PosixPath
-from profiling import profiling_context, Job, detect_runtime_environment
-from datasource import (
+from radiointerferometry.profiling import (
+    profiling_context,
+    Job,
+    detect_runtime_environment,
+)
+from radiointerferometry.datasource import (
     LithopsDataSource,
     InputS3,
     OutputS3,
     s3_to_local_path,
     local_path_to_s3,
 )
-from utils import (
+from radiointerferometry.utils import (
     dict_to_parset,
     setup_logging,
     get_memory_limit_cgroupv2,
     get_cpu_limit_cgroupv2,
 )
-from provisioning import OptimizedLithopsWrapper
+from flexexecutor import FlexExecutor
 
 
 class DP3Step:
@@ -157,7 +161,7 @@ class DP3Step:
         runtime_memory = 4000
         cpus_per_worker = 2
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
-        function_executor = OptimizedLithopsWrapper(
+        function_executor = FlexExecutor(
             {
                 "runtime_memory": runtime_memory,
                 "runtime_cpu": cpus_per_worker,

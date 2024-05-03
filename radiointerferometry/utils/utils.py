@@ -1,8 +1,7 @@
 import os
-import shutil
+import subprocess as sp
 from pathlib import PosixPath
 import logging
-import sys
 
 
 def get_memory_limit_cgroupv2():
@@ -37,16 +36,13 @@ def get_cpu_limit_cgroupv2():
         return str(e)
 
 
-def delete_all_in_cwd():
-    cwd = os.getcwd()
-    for filename in os.listdir(cwd):
-        try:
-            if os.path.isfile(filename) or os.path.islink(filename):
-                os.unlink(filename)
-            elif os.path.isdir(filename):
-                shutil.rmtree(filename)
-        except Exception as e:
-            print(f"Failed to delete {filename}. Reason: {e}")
+def get_dir_size(start_path="."):
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            total_size += os.path.getsize(fp)
+    return total_size
 
 
 def dict_to_parset(
