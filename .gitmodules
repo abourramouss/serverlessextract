@@ -1,0 +1,3 @@
+[submodule "flexexecutor"]
+	path = flexexecutor
+	url = https://github.com/abourramouss/smart-datastaging-layer.git
