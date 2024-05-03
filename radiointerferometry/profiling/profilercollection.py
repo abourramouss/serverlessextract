@@ -5,7 +5,7 @@ import os
 import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional
-from profiling import Profiler
+from ..profiling import Profiler
 
 
 @dataclass

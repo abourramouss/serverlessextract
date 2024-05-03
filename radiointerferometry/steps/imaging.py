@@ -1,14 +1,24 @@
-from pathlib import PosixPath
-from typing import Dict, List, Optional
-from s3path import S3Path
-from datasource import LithopsDataSource, InputS3, s3_to_local_path, local_path_to_s3
-from profiling import profiling_context, Job, detect_runtime_environment
-from profiling import time_it
 import os
 import lithops
 import pickle
 import subprocess as sp
 import time
+
+from pathlib import PosixPath
+from typing import Dict, List, Optional
+from s3path import S3Path
+from radiointerferometry.datasource import (
+    LithopsDataSource,
+    InputS3,
+    s3_to_local_path,
+    local_path_to_s3,
+)
+from radiointerferometry.profiling import (
+    profiling_context,
+    Job,
+    detect_runtime_environment,
+)
+from radiointerferometry.profiling import time_it
 from utils import setup_logging
 
 

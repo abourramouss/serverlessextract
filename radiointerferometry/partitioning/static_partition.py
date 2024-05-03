@@ -3,7 +3,7 @@ import os
 import concurrent.futures
 import shutil
 import numpy as np
-from datasource import LithopsDataSource, OutputS3, InputS3
+from radiointerferometry.datasource import LithopsDataSource, OutputS3, InputS3
 from pathlib import PosixPath
 
 MB = 1024 * 1024
