@@ -1,45 +1,51 @@
 import time
 import logging
-import hashlib
-import datetime
 import lithops
-
+from lithops.utils import get_executor_id
+from radiointerferometry.utils import setup_logging
 from radiointerferometry.steps.imaging import ImagingStep
 from radiointerferometry.steps.pipelinestep import DP3Step
 from radiointerferometry.datasource import InputS3, OutputS3
-from utils import setup_logging
-from radiointerferometry.partitioning import partition_ms
+from radiointerferometry.partitioning import StaticPartitioner
 
 # Logger setup
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 logger = setup_logging(LOG_LEVEL)
 
-current_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-run_hash = hashlib.sha256(current_time.encode()).hexdigest()[:10]
-logger.info(f"Run Hash: {run_hash}")
+
+partitioner = StaticPartitioner(log_level=LOG_LEVEL)
 
 
-def prepend_hash_to_key(base_key):
-    return f"{run_hash}/{base_key.strip('/')}"
+# TODO: This should be transparent to the user
+def get_executor_id_lithops():
+    lithops_exec_id = get_executor_id().split("-")[0]
+    return lithops_exec_id
+
+
+def prepend_hash_to_key(key: str) -> str:
+    return f"{get_executor_id_lithops()}/{key}"
+
+
+fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 
 
 # Create partitions beforehand from s3
 # Input ms's are stored here
-inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
+inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_total_2_4/")
 
 # Where to store the output ms's after partitioning
-msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total/")
+msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_4/")
+
 
 existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
 if len(existing_keys) == 0:
     partitioning_params = {
         "msin": inputs,
-        "num_partitions": 10,
+        "num_partitions": 2,
         "msout": msout,
     }
-    fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 
-    future = fexec.call_async(partition_ms, partitioning_params)
+    future = fexec.call_async(partitioner.partition_ms, partitioning_params)
 
     result = fexec.get_result()
 else:
@@ -201,13 +207,13 @@ finished_job = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL).run(
 end_time = time.time()
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 
-"""
+
 # Execute Calibration
 start_time = time.time()
 finished_job = DP3Step(
     parameters=[calibration_params, substraction, apply_calibration],
     log_level=LOG_LEVEL,
-).run(func_limit=1)
+).run()
 end_time = time.time()
 logger.info(f"Calibration completed in {end_time - start_time} seconds.")
 
@@ -222,4 +228,3 @@ finished_job = ImagingStep(
 ).run()
 end_time = time.time()
 logger.info(f"Imaging completed in {end_time - start_time} seconds.")
-"""
