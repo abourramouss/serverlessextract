@@ -46,6 +46,10 @@ class LithopsDataSource(DataSource):
     ):
         self.storage = Storage()
 
+    def exists(self, path: OutputS3) -> bool:
+        """Check if a file exists in an S3 bucket."""
+        return len(self.storage.list_keys(path.bucket, prefix=path.key)) > 0
+
     def download_file(
         self, read_path: InputS3, base_path: PosixPath = PosixPath("/tmp")
     ):
@@ -89,7 +93,7 @@ class LithopsDataSource(DataSource):
         try:
             self.storage.upload_file(str(local_path), bucket, key)
         except Exception as e:
-            print(f"Failed to upload file {local_path} to {output_s3}. Error: {e}")
+            print(e)
 
     def upload_directory(self, local_directory: PosixPath, output_s3: OutputS3):
         """Uploads all files within a local directory to an S3 path, maintaining structure."""

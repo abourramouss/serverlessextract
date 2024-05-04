@@ -1,1 +1,1 @@
-from .static_partition import partition_ms
+from .static_partition import StaticPartitioner

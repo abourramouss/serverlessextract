@@ -19,7 +19,6 @@ class InputS3:
         self._bucket = bucket
         self._key = key
         self._file_ext = file_ext
-
         self.dynamic = dynamic
 
     @property
@@ -89,6 +88,10 @@ class OutputS3:
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
 class DataSource(ABC):
+    @abstractmethod
+    def exists(self, path: OutputS3) -> bool:
+        pass
+
     @abstractmethod
     def download_file(self, read_path: S3Path, write_path: PosixPath) -> None:
         pass
