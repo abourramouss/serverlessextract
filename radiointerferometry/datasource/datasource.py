@@ -42,7 +42,10 @@ class InputS3:
         self._key = value
 
     def __str__(self):
-        return f"/{self._bucket}/{self._key}.{self._file_ext}"
+        if self._file_ext is None:
+            return f"/{self._bucket}/{self._key}"
+        else:
+            return f"/{self._bucket}/{self._key}.{self._file_ext}"
 
     def __repr__(self) -> str:
         return f"InputS3(bucket={self._bucket}, key={self._key}, file_ext={self._file_ext})"

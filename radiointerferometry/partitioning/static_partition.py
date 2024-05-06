@@ -13,10 +13,10 @@ MB = 1024 * 1024
 
 
 class StaticPartitioner:
-    def __init__(self, log_level):
+    def __init__(self, log_level="INFO"):
         self.__log_level = log_level
         self.__logger = setup_logging(self.__log_level)
-        self.__logger.debug("Debug level")
+        self.__logger.info("Started StaticPartitioner")
 
     def __generate_concatenated_identifier(self, ms_tables, num_partitions):
         hash_md5 = hashlib.md5()
