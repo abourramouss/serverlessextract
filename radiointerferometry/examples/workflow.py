@@ -38,25 +38,23 @@ msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_4/")
 
 
 existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
-if len(existing_keys) == 0:
-    partitioning_params = {
-        "msin": inputs,
-        "num_partitions": 2,
-        "msout": msout,
-    }
 
-    future = fexec.call_async(partitioner.partition_ms, partitioning_params)
+partitioning_params = {
+    "msin": inputs,
+    "num_partitions": 2,
+    "msout": msout,
+}
 
-    result = fexec.get_result()
-else:
-    logger.info("Partitions already exist, using them")
+future = fexec.call_async(partitioner.partition_ms, partitioning_params)
+
+result = fexec.get_result()
 
 
 # Rebinning parameters with hash included in the key as a root directory
 rebinning_params = {
     "msin": InputS3(
         bucket="ayman-extract",
-        key="partitions/partitions_total",
+        key="partitions/partitions_total_4/",
     ),
     "steps": "[aoflag, avg, count]",
     "aoflag.type": "aoflagger",
