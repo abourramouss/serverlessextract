@@ -30,13 +30,29 @@ fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 
 
 # Create partitions beforehand from s3
-# Input ms's are stored here
 inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
 
 
+msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_10/")
+
+
+existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
+
+partitioning_params = {
+    "msin": inputs,
+    "num_partitions": 2,
+    "msout": msout,
+}
+
+future = fexec.call_async(partitioner.partition_ms, partitioning_params)
+
+result = fexec.get_result()
+
+logger.info(f"Partitioning result can be found at {result}.")
+
 # Rebinning parameters, partitioning results are sent to msin
 rebinning_params = {
-    "msin": inputs,
+    "msin": result,
     "steps": "[aoflag, avg, count]",
     "aoflag.type": "aoflagger",
     "aoflag.strategy": InputS3(
@@ -58,6 +74,7 @@ rebinning_params = {
         file_ext="log",
     ),
 }
+
 
 # Calibration parameters with hash included in the key as a root directory
 calibration_params = {
@@ -206,6 +223,7 @@ finished_job = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL).run(
 end_time = time.time()
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 
+"""
 
 # Execute Calibration
 start_time = time.time()
@@ -228,3 +246,5 @@ finished_job = ImagingStep(
 ).run()
 end_time = time.time()
 logger.info(f"Imaging completed in {end_time - start_time} seconds.")
+
+"""

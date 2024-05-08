@@ -12,96 +12,59 @@ logging.basicConfig(
 )
 
 
-class InputS3:
+class S3Path:
+    def __init__(self, bucket: str, key: str, file_ext: str = None):
+        self._bucket = bucket
+        self._key = key
+        self._file_ext = file_ext
+
+    @property
+    def bucket(self):
+        return self._bucket
+
+    @bucket.setter
+    def bucket(self, value):
+        self._bucket = value
+
+    @property
+    def key(self):
+        return self._key
+
+    @key.setter
+    def key(self, value):
+        self._key = value
+
+    @property
+    def file_ext(self):
+        return self._file_ext
+
+    def __repr__(self):
+        return f"/{self._bucket}/{self._key}{('.' + self._file_ext if self._file_ext else '')}"
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class InputS3(S3Path):
     def __init__(
         self, bucket: str, key: str, file_ext: str = None, dynamic: bool = False
     ):
-        self._bucket = bucket
-        self._key = key
-        self._file_ext = file_ext
+        super().__init__(bucket, key, file_ext)
         self.dynamic = dynamic
 
-    @property
-    def bucket(self):
-        return self._bucket
 
-    @bucket.setter
-    def bucket(self, value):
-        self._bucket = value
-
-    @property
-    def key(self):
-        return self._key
-
-    @property
-    def file_ext(self):
-        return self._file_ext
-
-    @key.setter
-    def key(self, value):
-        self._key = value
-
-    def __repr__(self):
-        if self._file_ext is None:
-            return f"/{self._bucket}/{self._key}"
-        else:
-            return f"/{self._bucket}/{self._key}.{self._file_ext}"
-
-    def __str__(self):
-        if self._file_ext is None:
-            return f"/{self._bucket}/{self._key}"
-        else:
-            return f"/{self._bucket}/{self._key}.{self._file_ext}"
-
-
-class OutputS3:
-    def __init__(self, bucket: str, key: str, file_ext: str = None, file_name=None):
-        self._bucket = bucket
-        self._key = key
-        self._file_ext = file_ext
+class OutputS3(S3Path):
+    def __init__(
+        self, bucket: str, key: str, file_ext: str = None, file_name: str = None
+    ):
+        super().__init__(bucket, key, file_ext)
         self._file_name = file_name
-
-    @property
-    def bucket(self):
-        return self._bucket
-
-    @bucket.setter
-    def bucket(self, value):
-        self._bucket = value
-
-    @property
-    def key(self):
-        return self._key
-
-    @key.setter
-    def key(self, value):
-        self._key = value
-
-    @property
-    def file_name(self):
-        return self._file_name
-
-    @property
-    def file_ext(self):
-        return self._file_ext
-
-    def __repr__(self):
-        if self._file_ext is None:
-            return f"/{self._bucket}/{self._key}"
-        else:
-            return f"/{self._bucket}/{self._key}.{self._file_ext}"
-
-    def __str__(self):
-        if self._file_ext is None:
-            return f"/{self._bucket}/{self._key}"
-        else:
-            return f"/{self._bucket}/{self._key}.{self._file_ext}"
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
 class DataSource(ABC):
     @abstractmethod
-    def exists(self, path: OutputS3) -> bool:
+    def exists(self, path: S3Path) -> bool:
         pass
 
     @abstractmethod
@@ -164,7 +127,6 @@ class DataSource(ABC):
         extract_path = ms.parent / ms.stem
         if not extract_path.exists():
             extract_path.mkdir(parents=True, exist_ok=True)
-
         with zipfile.ZipFile(ms, "r") as zipf:
             zip_contents = zipf.namelist()
             logging.debug(f"Zip contents: {zip_contents}")
