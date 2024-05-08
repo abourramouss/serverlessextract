@@ -9,6 +9,7 @@ This repository provides guidance on configuring and utilizing a custom Docker r
 - A Docker Hub account or access to a private Docker registry
 - A object storage backend installed in your cluster, in our case we use Minio, but any backend compatible with lithops should work (https://lithops-cloud.github.io/docs/source/storage_backends.html) 
 
+
 ## Configuration
 
 Ensure your `~/.lithops/config` is properly configured to use Kubernetes as the backend and to specify your custom runtime:
@@ -85,9 +86,21 @@ This is an already partitioned measurement set that can be partitioned into smal
 The needed parameters for running the workflows are already defined, but there are file parameters, which are provided https://www.dropbox.com/scl/fi/it5n0x1l3d0wtq3n84aed/05-02-2024-11-20-41_files_list.zip?rlkey=5tt2j99ef445o8nm6heaarfk3&st=zmfzioxx&dl=0
 
 Modify the workflow.py parameters to point to the s3-like path where those file-like parameters can be found.
+
+## Installing the radio interferometry package
+
+Install the radio interferometry package in developement mode by using:
+
+```
+python -m pip install -e .
+
+```
+
+NOTE: You have to be under the root directory of the project, at the radiointerferometry folder.
 ## Running Interferometry Workflows
 
-Once the custom runtime is deployed and configured and the data is prepared, you can utilize the workflow.py to execute the workflow, the workflows to be executed are defined under that script.
+
+Once the custom runtime is deployed and configured and the data is prepared, you can utilize the workflow.py located under radiointerferometry/examples to execute the workflow, the workflows to be executed are defined under that script.
 
 As a note, an input and output to a step is always a S3-path pointing to a directory, where it expects to find the data (a measurement set or multiple measurement sets).
 
