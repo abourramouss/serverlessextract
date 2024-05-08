@@ -4,6 +4,7 @@ import time
 import os
 import subprocess as sp
 import pprint
+import copy
 
 from typing import Dict, List, Optional
 from pathlib import PosixPath
@@ -84,10 +85,9 @@ class DP3Step:
             elif isinstance(val, OutputS3):
                 self.__logger.info(f"Preparing output path for key {key} using {val}")
                 local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
-                final_output_path = (
-                    local_directory_path / f"{val.file_name}.{val.file_ext}"
-                )
-                os.makedirs(os.path.dirname(final_output_path), exist_ok=True)
+
+                os.makedirs(local_directory_path.parent, exist_ok=True)
+                final_output_path = local_directory_path
                 self.__logger.debug(f"Output path prepared: {final_output_path}")
                 # TODO: Add the parameters or whatever at the end, basically compose the key correctly
                 directories[final_output_path] = val
@@ -97,8 +97,14 @@ class DP3Step:
         params_path = dict_to_parset(params)
         cmd = ["DP3", str(params_path)]
         self.__logger.debug(f"Executing DP3 command with parameters: {cmd}")
-        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-        stdout, stderr = proc.communicate()
+        self.__logger.info(f"Saving DP3 execution log to {params['log_output']}")
+        with open(params["log_output"], "w") as log_file:
+            proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+            stdout, stderr = proc.communicate()
+
+            log_file.write(f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}")
+
+        self.__logger.info(f"DP3 execution log saved to {params['log_output']}")
 
         self.__logger.info(f"DP3 execution stdout: {stdout if stdout else 'No Output'}")
         self.__logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
@@ -129,7 +135,7 @@ class DP3Step:
         )
         return time_records
 
-    def _execute_step(self, id, command_args):
+    def _execute_step(self, id, parameter_list: List[Dict]):
         self.__logger = setup_logging(self.__log_level)
         memory_limit = get_memory_limit_cgroupv2()
         cpu_limit = get_cpu_limit_cgroupv2()
@@ -137,13 +143,12 @@ class DP3Step:
         self.__logger.info(f"Memory Limit: {memory_limit} GB")
         self.__logger.info(f"CPU Limit: {cpu_limit}")
         self.__logger.info(f"Worker {id} executing step")
-        self.__logger.info(f"Command args: {command_args}")
+        self.__logger.info(f"parameter list: {parameter_list}")
 
         with profiling_context(os.getpid()) as profiler:
-            self.execute_step(
-                command_args, id=id
-            )  # Call execute_step directly with command_args
-            function_timers = []
+            for param in parameter_list:
+                self.execute_step(param, id=id)
+                function_timers = []
 
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -155,24 +160,26 @@ class DP3Step:
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
     def __construct_params_for_key(self, base_params, key, bucket):
-        new_params = base_params.copy()
-        new_key_suffix = key.split("/")[-1]
-        new_key = f"{base_params['msin'].key.rstrip('/')}/{new_key_suffix}"
-        new_params["msin"] = InputS3(bucket=bucket, key=new_key)
+        new_params = copy.deepcopy(base_params)
+        file_name_suffix = key.split("/")[-1].split(".")[0]
+        new_params["msin"] = InputS3(bucket=bucket, key=key)
 
         for k, v in new_params.items():
             if isinstance(v, OutputS3):
+                new_file_name = (
+                    f"{file_name_suffix}.{v.file_ext if v.file_ext else 'default_ext'}"
+                )
+                new_key_path = f"{v.key}/{new_file_name}"
                 new_params[k] = OutputS3(
                     bucket=v.bucket,
-                    key=f"{v.key}",
-                    file_ext=v.file_ext,
-                    file_name=key.split("/")[-1].split(".")[0],
+                    key=new_key_path,
                 )
+                self.__logger.info(f"New output path: {new_key_path}")
             elif isinstance(v, InputS3) and v.dynamic:
-                dynamic_key = f"{v.key}/{new_key_suffix}.{v.file_ext}"
-                new_params[k] = InputS3(bucket=v.bucket, key=dynamic_key)
+                dynamic_key = f"{v.key}/{file_name_suffix}.{v.file_ext}"
+                new_params[k] = InputS3(bucket=bucket, key=dynamic_key)
 
-        return {"command_args": new_params}
+        return new_params
 
     def run(self, func_limit: Optional[int] = None):
         runtime_memory = 4000
@@ -184,26 +191,26 @@ class DP3Step:
             runtime_cpu=cpus_per_worker,
         )
 
-        # Retrieve and limit keys if necessary
         bucket = self.__parameters[0]["msin"].bucket
         prefix = self.__parameters[0]["msin"].key
-        keys = (
-            lithops.Storage().list_keys(bucket=bucket, prefix=prefix)[:func_limit]
-            if func_limit
-            else lithops.Storage().list_keys(bucket=bucket, prefix=prefix)
-        )
 
-        self.__logger.debug(keys)
+        print(f"Bucket: {bucket}, Prefix: {prefix}")
+        keys = lithops.Storage().list_keys(bucket=bucket, prefix=prefix)[:func_limit]
+
+        self.__logger.info(f"keys : {keys}")
         chunk_size = f"{int(lithops.Storage().head_object(bucket, keys[0])['content-length']) / 1024 ** 2} MB"
 
-        # Construct parameters for each key
         function_params = [
-            self.__construct_params_for_key(params, key, bucket)
-            for key in keys
-            for params in self.__parameters
+            [
+                self.__construct_params_for_key(params, key, bucket)
+                for key in keys
+                for params in self.__parameters
+            ]
         ]
 
+        self.__logger.info(f"Function params: {function_params}")
         start_time = time.time()
+
         futures = function_executor.map(
             self._execute_step, function_params, extra_env=extra_env
         )

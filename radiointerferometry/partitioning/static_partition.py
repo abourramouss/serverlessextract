@@ -166,4 +166,4 @@ class StaticPartitioner:
             self.__logger.info(
                 f"Partitions already exist in {msout.bucket}/{msout.key}. Skipping partitioning."
             )
-            return InputS3(bucket=msout.bucket, key=msout.key)
+        return InputS3(bucket=msout.bucket, key=msout.key)

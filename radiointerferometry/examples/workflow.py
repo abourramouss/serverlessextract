@@ -9,7 +9,7 @@ from radiointerferometry.datasource import InputS3, OutputS3
 from radiointerferometry.partitioning import StaticPartitioner
 
 # Logger setup
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.INFO
 logger = setup_logging(LOG_LEVEL)
 
 
@@ -31,31 +31,12 @@ fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 
 # Create partitions beforehand from s3
 # Input ms's are stored here
-inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_total_2_4/")
-
-# Where to store the output ms's after partitioning
-msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_4/")
+inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
 
 
-existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
-
-partitioning_params = {
-    "msin": inputs,
-    "num_partitions": 2,
-    "msout": msout,
-}
-
-future = fexec.call_async(partitioner.partition_ms, partitioning_params)
-
-result = fexec.get_result()
-
-
-# Rebinning parameters with hash included in the key as a root directory
+# Rebinning parameters, partitioning results are sent to msin
 rebinning_params = {
-    "msin": InputS3(
-        bucket="ayman-extract",
-        key="partitions/partitions_total_4/",
-    ),
+    "msin": inputs,
     "steps": "[aoflag, avg, count]",
     "aoflag.type": "aoflagger",
     "aoflag.strategy": InputS3(
@@ -67,17 +48,22 @@ rebinning_params = {
     "avg.timestep": 8,
     "msout": OutputS3(
         bucket="ayman-extract",
-        key=prepend_hash_to_key("rebinning_out"),
+        key=prepend_hash_to_key("applycal_out/ms"),
         file_ext="ms",
     ),
     "numthreads": 4,
+    "log_output": OutputS3(
+        bucket="ayman-extract",
+        key=prepend_hash_to_key("rebinning_out/logs"),
+        file_ext="log",
+    ),
 }
 
 # Calibration parameters with hash included in the key as a root directory
 calibration_params = {
     "msin": InputS3(
         bucket="ayman-extract",
-        key=prepend_hash_to_key("rebinning_out"),
+        key=prepend_hash_to_key("applycal_out/ms"),
     ),
     "msin.datacolumn": "DATA",
     "msout": ".",
@@ -90,7 +76,7 @@ calibration_params = {
     ),
     "cal.h5parm": OutputS3(
         bucket="ayman-extract",
-        key=prepend_hash_to_key("applycal_out/h5"),
+        key=prepend_hash_to_key("applycal_out/cal/h5"),
         file_ext="h5",
     ),
     "cal.solint": 4,
@@ -103,6 +89,11 @@ calibration_params = {
         bucket="ayman-extract",
         key=prepend_hash_to_key("applycal_out/ms"),
         file_ext="ms",
+    ),
+    "log_output": OutputS3(
+        bucket="ayman-extract",
+        key=prepend_hash_to_key("applycal_out/cal/logs"),
+        file_ext="log",
     ),
 }
 
@@ -121,7 +112,7 @@ substraction = {
     "sub.operation": "subtract",
     "sub.applycal.parmdb": InputS3(
         bucket="ayman-extract",
-        key=prepend_hash_to_key("applycal_out/h5"),
+        key=prepend_hash_to_key("applycal_out/cal/h5"),
         dynamic=True,
         file_ext="h5",
     ),
@@ -133,6 +124,11 @@ substraction = {
         bucket="ayman-extract",
         key=prepend_hash_to_key("applycal_out/ms"),
         file_ext="ms",
+    ),
+    "log_output": OutputS3(
+        bucket="ayman-extract",
+        key=prepend_hash_to_key("applycal_out/substract/logs"),
+        file_ext="log",
     ),
 }
 
@@ -154,9 +150,14 @@ apply_calibration = {
     "apply.direction": "[Main]",
     "apply.parmdb": InputS3(
         bucket="ayman-extract",
-        key=prepend_hash_to_key("applycal_out/h5"),
+        key=prepend_hash_to_key("applycal_out/cal/h5"),
         dynamic=True,
         file_ext="h5",
+    ),
+    "log_output": OutputS3(
+        bucket="ayman-extract",
+        key=prepend_hash_to_key("applycal_out/apply/logs"),
+        file_ext="log",
     ),
 }
 
@@ -214,6 +215,7 @@ finished_job = DP3Step(
 ).run()
 end_time = time.time()
 logger.info(f"Calibration completed in {end_time - start_time} seconds.")
+
 
 # Execute Imaging
 start_time = time.time()
