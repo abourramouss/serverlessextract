@@ -41,14 +41,17 @@ class InputS3:
     def key(self, value):
         self._key = value
 
-    def __str__(self):
+    def __repr__(self):
         if self._file_ext is None:
             return f"/{self._bucket}/{self._key}"
         else:
             return f"/{self._bucket}/{self._key}.{self._file_ext}"
 
-    def __repr__(self) -> str:
-        return f"InputS3(bucket={self._bucket}, key={self._key}, file_ext={self._file_ext})"
+    def __str__(self):
+        if self._file_ext is None:
+            return f"/{self._bucket}/{self._key}"
+        else:
+            return f"/{self._bucket}/{self._key}.{self._file_ext}"
 
 
 class OutputS3:
@@ -82,11 +85,17 @@ class OutputS3:
     def file_ext(self):
         return self._file_ext
 
-    def __str__(self) -> str:
-        return f"/{self._bucket}/{self._key}/{self._file_name}.{self._file_ext}"
+    def __repr__(self):
+        if self._file_ext is None:
+            return f"/{self._bucket}/{self._key}"
+        else:
+            return f"/{self._bucket}/{self._key}.{self._file_ext}"
 
-    def __repr__(self) -> str:
-        return f"OutputS3(bucket={self._bucket}, key={self._key}, file_ext={self._file_ext})"
+    def __str__(self):
+        if self._file_ext is None:
+            return f"/{self._bucket}/{self._key}"
+        else:
+            return f"/{self._bucket}/{self._key}.{self._file_ext}"
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
