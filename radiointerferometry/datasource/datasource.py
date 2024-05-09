@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
 from pathlib import PosixPath
-from typing import Union
 from s3path import S3Path
 import zipfile
 import os
-import shutil
 import logging
+from radiointerferometry.profiling import time_it
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -63,6 +62,9 @@ class OutputS3(S3Path):
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
 class DataSource(ABC):
+    def __init__(self):
+        self.timings = []
+
     @abstractmethod
     def exists(self, path: S3Path) -> bool:
         pass

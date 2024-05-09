@@ -1,29 +1,28 @@
-"""This class serves as a container for multiple profilers, since there are multiple profilers outputted by each step and iterations, it serves as a higher level abstraction to simplify the code"""
-
 import json
 import os
-import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional
 from ..profiling import Profiler
 
 
 @dataclass
-class Job:
+class CompletedStep:
     chunk_size: int
+    step_name: str
     memory: int
     cpus_per_worker: int
     number_workers: int
     start_time: float
     end_time: float
     profilers: List[Profiler]
-    job_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    step_id: str
     environment: Optional[str] = field(default=None)
     instance_type: Optional[str] = field(default=None)
 
     def to_dict(self):
         return {
-            "job_id": self.job_id,
+            "step_name": self.step_name,
+            "step_id": self.step_id,
             "chunk_size": self.chunk_size,
             "memory": self.memory,
             "cpus_per_worker": self.cpus_per_worker,
@@ -48,116 +47,88 @@ class Job:
             environment=data.get("environment"),
             instance_type=data.get("instance_type"),
             profilers=profilers,
+            step_id=data["step_id"],
+            step_name=data["step_name"],
         )
 
 
-class Step:
-    def __init__(self, step_name: str):
-        self.step_name = step_name
-        self.jobs = []
+class CompletedWorkflow:
+    def __init__(self):
+        self.completed_steps = []
 
     def __iter__(self):
-        return iter(self.jobs)
+        return iter(self.completed_steps)
 
-    def add_job(
+    def add_completed_step(
         self,
-        chunk_size: int,
-        memory: int,
-        cpus_per_worker: int,
-        number_workers: int,
-        start_time: float,
-        end_time: float,
-        profilers: List[Profiler],
-        instance_type: Optional[str] = None,
-        environment: Optional[str] = None,
+        completed_step: CompletedStep,
     ):
-        job = Job(
-            chunk_size=chunk_size,
-            memory=memory,
-            cpus_per_worker=cpus_per_worker,
-            number_workers=number_workers,
-            start_time=start_time,
-            end_time=end_time,
-            profilers=profilers,
-            instance_type=instance_type,
-            environment=environment,
-        )
-        self.jobs.append(job)
+        self.completed_steps.append(completed_step)
 
     def to_dict(self):
         return {
-            "step_name": self.step_name,
-            "jobs": [job.to_dict() for job in self.jobs],
+            "completed_steps": [step.to_dict() for step in self.completed_steps],
         }
 
     @classmethod
     def from_dict(cls, data):
-        step = cls(data["step_name"])
-        for job_data in data["jobs"]:
-            step.add_job(
-                chunk_size=job_data["chunk_size"],
-                memory=job_data["memory"],
-                cpus_per_worker=job_data["cpus_per_worker"],
-                number_workers=job_data.get(
-                    "number_workers", len(job_data["profilers"])
-                ),
-                start_time=job_data["start_time"],
-                end_time=job_data["end_time"],
-                profilers=[Profiler.from_dict(p) for p in job_data["profilers"]],
-                instance_type=job_data.get("instance_type"),
-                environment=job_data.get("environment"),  # Include environment field
-            )
-        return step
+        workflow = cls(data)
+        for step_data in data["completed_steps"]:
+            workflow.add_completed_step(**step_data)
+        return workflow
 
 
-class JobCollection:
+class CompletedWorkflowsCollection:
     def __init__(self):
-        self.steps = {}  # Dict[str, Step]
+        self.workflows = {}
 
-    def __getitem__(self, step_name):
-        return self.steps[step_name]
+    def __getitem__(self, workflow_name):
+        return self.workflows[workflow_name]
 
     def __len__(self):
-        return sum(len(step.jobs) for step in self.steps.values())
+        return sum(
+            len(workflow.completed_steps) for workflow in self.workflows.values()
+        )
 
     def __iter__(self):
-        for step_name, step in self.steps.items():
-            for job in step.jobs:
-                yield (step_name, job)
+        for workflow_name, workflow in self.workflows.items():
+            for completed_step in workflow.completed_steps:
+                yield (workflow_name, completed_step)
 
-    def get_profilers(self, step_name, memory, chunk_size):
-        return [
-            job.profilers
-            for job in self.steps.get(step_name, []).jobs
-            if job.memory == memory and job.chunk_size == chunk_size
-        ]
-
-    def add_step_profiler(
+    def add_workflow_step(
         self,
-        step_name,
+        workflow_name,
+        chunk_size,
         memory,
         cpus_per_worker,
-        chunk_size,
         start_time,
         end_time,
         profilers,
+        step_id,
+        number_workers,
+        instance_type=None,
+        environment=None,
     ):
-        if step_name not in self.steps:
-            self.steps[step_name] = Step(step_name)
-        self.steps[step_name].add_job(
-            chunk_size, memory, cpus_per_worker, start_time, end_time, profilers
+        if workflow_name not in self.workflows:
+            self.workflows[workflow_name] = CompletedWorkflow(workflow_name)
+        self.workflows[workflow_name].add_completed_step(
+            chunk_size,
+            memory,
+            cpus_per_worker,
+            number_workers,
+            start_time,
+            end_time,
+            profilers,
+            step_id,
+            instance_type,
+            environment,
         )
 
-    def get_jobs_by_memory_and_chunk_size(self, memory, chunk_size):
-        jobs = []
-        for step in self.steps.values():
-            for job in step.jobs:
-                if job.memory == memory and job.chunk_size == chunk_size:
-                    jobs.append(job)
-        return jobs
-
     def to_dict(self):
-        return {step_name: step.to_dict() for step_name, step in self.steps.items()}
+        return {
+            workflow_name: workflow.to_dict()
+            for workflow_name, workflow in self.workflows.items()
+        }
 
     def save_to_file(self, file_path):
         with open(file_path, "w") as file:
@@ -165,19 +136,11 @@ class JobCollection:
 
     @classmethod
     def load_from_file(cls, file_path):
-        job_collection = cls()
+        workflow_collection = cls()
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             with open(file_path, "r") as file:
                 data = json.load(file)
-            for step_name, step_data in data.items():
-                step = Step.from_dict(step_data)
-                job_collection.steps[step_name] = step
-        return job_collection
-
-    def add_job(self, step_name: str, job: Job):
-        print(
-            f"Adding job with ID {job.job_id} to step '{step_name}' with instance type '{job.instance_type}'"
-        )
-        if step_name not in self.steps:
-            self.steps[step_name] = Step(step_name)
-        self.steps[step_name].jobs.append(job)
+            for workflow_name, workflow_data in data.items():
+                workflow = CompletedWorkflow.from_dict(workflow_data)
+                workflow_collection.workflows[workflow_name] = workflow
+        return workflow_collection

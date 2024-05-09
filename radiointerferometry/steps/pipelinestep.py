@@ -1,17 +1,15 @@
 import lithops
-import pickle
 import time
 import os
 import subprocess as sp
-import pprint
 import copy
 
 from typing import Dict, List, Optional
 from pathlib import PosixPath
+
 from radiointerferometry.profiling import (
     profiling_context,
-    Job,
-    detect_runtime_environment,
+    CompletedStep,
 )
 from radiointerferometry.datasource import (
     LithopsDataSource,
@@ -23,10 +21,13 @@ from radiointerferometry.datasource import (
 from radiointerferometry.utils import (
     dict_to_parset,
     setup_logging,
+    detect_runtime_environment,
     get_memory_limit_cgroupv2,
     get_cpu_limit_cgroupv2,
+    get_executor_id_lithops,
 )
-from flexexecutor import FlexExecutor
+
+from radiointerferometry.profiling import time_it
 
 
 class DP3Step:
@@ -40,6 +41,7 @@ class DP3Step:
         self.__logger.debug("DP3 Step initialized")
 
     def execute_step(self, params: dict, id=None):
+        time_records = []
         working_dir = PosixPath(os.getenv("HOME"))
         data_source = LithopsDataSource()
 
@@ -51,11 +53,17 @@ class DP3Step:
         for key, val in params.items():
             if isinstance(val, InputS3):
                 self.__logger.info(f"Downloading data for key {key} from S3: {val}")
-                path = data_source.download_directory(val, working_dir)
+
+                path = time_it(
+                    "Download directory",
+                    data_source.download_directory,
+                    time_records,
+                    val,
+                    working_dir,
+                )
                 self.__logger.debug(
                     f"Downloaded path type: {'Directory' if path.is_dir() else 'File'} at {path}"
                 )
-
                 self.__logger.debug(
                     f"Checking path: {path}, Type: {type(path)}, Exists: {path.exists()}, Is File: {path.is_file()}"
                 )
@@ -67,70 +75,60 @@ class DP3Step:
                         f"Path {path} is a file with extension {path.suffix}"
                     )
                     if path.suffix.lower() == ".zip":
-                        path = data_source.unzip(path)
+                        # Timing the unzip
+                        path = time_it(
+                            "Unzip file", data_source.unzip, time_records, path
+                        )
                         self.__logger.debug(f"Extracting zip file at {path}")
                     else:
                         self.__logger.debug(f"Path {path} is a recognized file type.")
-                else:
-                    # TODO: Handle case where h5 file isn't related to msin
-                    self.__logger.warning(
-                        f"Path {path} is neither a directory nor a recognized file type."
-                    )
-                    self.__logger.debug(
-                        f"File status - Exists: {os.path.exists(path)}, Is File: {os.path.isfile(path)}"
-                    )
 
                 params[key] = str(path)
 
             elif isinstance(val, OutputS3):
                 self.__logger.info(f"Preparing output path for key {key} using {val}")
                 local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
-
                 os.makedirs(local_directory_path.parent, exist_ok=True)
                 final_output_path = local_directory_path
                 self.__logger.debug(f"Output path prepared: {final_output_path}")
-                # TODO: Add the parameters or whatever at the end, basically compose the key correctly
                 directories[final_output_path] = val
                 params[key] = str(final_output_path)
-                self.__logger.debug(f"Directories {directories}")
+
         self.__logger.debug(f"Final params for DP3 command: {params}")
         params_path = dict_to_parset(params)
         cmd = ["DP3", str(params_path)]
         self.__logger.debug(f"Executing DP3 command with parameters: {cmd}")
-        self.__logger.info(f"Saving DP3 execution log to {params['log_output']}")
-        with open(params["log_output"], "w") as log_file:
-            proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-            stdout, stderr = proc.communicate()
+        log_output = params["log_output"]
 
-            log_file.write(f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}")
+        stdout, stderr = time_it(
+            "Execute DP3 command", self.run_command, time_records, cmd, log_output
+        )
 
         self.__logger.info(f"DP3 execution log saved to {params['log_output']}")
-
         self.__logger.info(f"DP3 execution stdout: {stdout if stdout else 'No Output'}")
         self.__logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
 
-        # TODO: Remove directories dict, it can be an array
         for key, val in directories.items():
-            self.__logger.debug(f"Checking existence of output path: {key}")
             if os.path.exists(key):
                 self.__logger.debug(f"Path exists, proceeding to zip: {key}")
                 try:
-                    self.__logger.debug(f"Going to zip {key}")
-                    zip_path = data_source.zip_without_compression(key)
-
-                    self.__logger.debug(f"Zip created at {zip_path}, uploading to S3")
-                    data_source.upload_file(zip_path, local_path_to_s3(zip_path))
-                    self.__logger.debug(
-                        f"Uploaded zip file to S3: {local_path_to_s3(zip_path)}"
+                    zip_path = time_it(
+                        "Zip without compression",
+                        data_source.zip_without_compression,
+                        time_records,
+                        key,
+                    )
+                    time_it(
+                        "Upload file",
+                        data_source.upload_file,
+                        time_records,
+                        zip_path,
+                        local_path_to_s3(zip_path),
                     )
                 except IsADirectoryError as e:
                     self.__logger.error(f"Error while zipping: {e}")
-            else:
-                # Do something else in here
-                self.__logger.error(f"Path {key} does not exist. Skipping zipping.")
 
-        time_records = []
-        self.__logger.info(
+        self.__logger.debug(
             f"Worker id: {id} completed execution. Time records: {time_records}"
         )
         return time_records
@@ -147,8 +145,7 @@ class DP3Step:
 
         with profiling_context(os.getpid()) as profiler:
             for param in parameter_list:
-                self.execute_step(param, id=id)
-                function_timers = []
+                function_timers = self.execute_step(param, id=id)
 
         profiler.function_timers = function_timers
         profiler.worker_id = id
@@ -157,6 +154,12 @@ class DP3Step:
         self.__logger.info(
             f"Worker {id} finished step on {env} instance {instance_type}"
         )
+
+        self.__logger.info(f"_execute_step id{id}")
+
+        for key, value in os.environ.items():
+            self.__logger.info(f"{key}={value}")
+        self.__logger.info("ENV VARIABLES")
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
     def __construct_params_for_key(self, base_params, key, bucket):
@@ -181,7 +184,14 @@ class DP3Step:
 
         return new_params
 
-    def run(self, func_limit: Optional[int] = None):
+    def run_command(self, cmd, log_output):
+        with open(log_output, "w") as log_file:
+            proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+            stdout, stderr = proc.communicate()
+            log_file.write(f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}")
+        return stdout, stderr
+
+    def run(self, func_limit: Optional[int] = None, step_name: Optional[str] = None):
         runtime_memory = 4000
         cpus_per_worker = 2
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
@@ -194,11 +204,10 @@ class DP3Step:
         bucket = self.__parameters[0]["msin"].bucket
         prefix = self.__parameters[0]["msin"].key
 
-        print(f"Bucket: {bucket}, Prefix: {prefix}")
         keys = lithops.Storage().list_keys(bucket=bucket, prefix=prefix)[:func_limit]
 
         self.__logger.info(f"keys : {keys}")
-        chunk_size = f"{int(lithops.Storage().head_object(bucket, keys[0])['content-length']) / 1024 ** 2} MB"
+        chunk_size = f"{round(int(lithops.Storage().head_object(bucket, keys[0])['content-length']) / 1024 ** 2, 2)} MB"
 
         function_params = [
             [
@@ -214,19 +223,29 @@ class DP3Step:
         futures = function_executor.map(
             self._execute_step, function_params, extra_env=extra_env
         )
-        results = function_executor.get_result(futures)
+        profiled_workers = function_executor.get_result(futures)
         end_time = time.time()
 
-        job = Job(
+        for worker_id in range(len(profiled_workers)):
+            profiled_workers[worker_id]["profiler"].worker_start_tstamp = futures[
+                worker_id
+            ].stats["worker_end_tstamp"]
+            profiled_workers[worker_id]["profiler"].worker_end_tstamp = futures[
+                worker_id
+            ].stats["worker_end_tstamp"]
+
+        completed_step = CompletedStep(
+            step_id=get_executor_id_lithops(),
+            step_name=step_name,
             memory=runtime_memory,
             cpus_per_worker=cpus_per_worker,
             chunk_size=chunk_size,
             start_time=start_time,
             end_time=end_time,
-            number_workers=len(results),
-            profilers=[],
-            instance_type=results[0].get("instance_type", "unknown"),
-            environment=results[0].get("env", "unknown"),
+            number_workers=len(profiled_workers),
+            profilers=profiled_workers,
+            instance_type=profiled_workers[0].get("instance_type", "unknown"),
+            environment=profiled_workers[0].get("env", "unknown"),
         )
 
-        return job
+        return completed_step
