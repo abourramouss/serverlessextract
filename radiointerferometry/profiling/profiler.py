@@ -8,31 +8,6 @@ import requests
 from dataclasses import dataclass, asdict, fields
 
 
-def detect_runtime_environment():
-    if "AWS_LAMBDA_FUNCTION_NAME" in os.environ:
-        return ("AWS Lambda", None)
-
-    try:
-        token_response = requests.put(
-            "http://169.254.169.254/latest/api/token",
-            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
-            timeout=1,
-        )
-        if token_response.status_code == 200:
-            token = token_response.text
-            response = requests.get(
-                "http://169.254.169.254/latest/meta-data/instance-type",
-                headers={"X-aws-ec2-metadata-token": token},
-                timeout=1,
-            )
-            if response.status_code == 200:
-                return ("Amazon EC2", response.text)
-    except requests.exceptions.RequestException:
-        pass
-
-    return ("Unknown", None)
-
-
 def time_it(label, function, time_records, *args, **kwargs):
     print(f"label: {label}, type of function: {type(function)}")
 

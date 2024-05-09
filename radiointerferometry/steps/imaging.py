@@ -13,11 +13,8 @@ from radiointerferometry.datasource import (
     s3_to_local_path,
     local_path_to_s3,
 )
-from radiointerferometry.profiling import (
-    profiling_context,
-    Job,
-    detect_runtime_environment,
-)
+from radiointerferometry.utils import detect_runtime_environment
+from radiointerferometry.profiling import profiling_context, CompletedStep
 from radiointerferometry.profiling import time_it
 from utils import setup_logging
 
@@ -189,7 +186,7 @@ class ImagingStep:
         profiler.worker_start_tstamp = future.stats["worker_start_tstamp"]
         profiler.worker_end_tstamp = future.stats["worker_end_tstamp"]
 
-        job = Job(
+        completed_step = CompletedStep(
             memory=runtime_memory,
             cpus_per_worker=cpus_per_worker,
             chunk_size=chunk_size,
@@ -201,4 +198,4 @@ class ImagingStep:
             environment=env,
         )
 
-        return job
+        return completed_step
