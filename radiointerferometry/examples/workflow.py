@@ -1,25 +1,20 @@
 import time
 import logging
 import lithops
-from lithops.utils import get_executor_id
-from radiointerferometry.utils import setup_logging
+from radiointerferometry.utils import setup_logging, get_executor_id_lithops
 from radiointerferometry.steps.imaging import ImagingStep
 from radiointerferometry.steps.pipelinestep import DP3Step
 from radiointerferometry.datasource import InputS3, OutputS3
 from radiointerferometry.partitioning import StaticPartitioner
+from radiointerferometry.profiling import Workflow, WorkflowCollection
+
 
 # Logger setup
 LOG_LEVEL = logging.INFO
 logger = setup_logging(LOG_LEVEL)
-
-
+collection_run_workflows = WorkflowCollection()
+current_workflow = Workflow()
 partitioner = StaticPartitioner(log_level=LOG_LEVEL)
-
-
-# TODO: This should be transparent to the user
-def get_executor_id_lithops():
-    lithops_exec_id = get_executor_id().split("-")[0]
-    return lithops_exec_id
 
 
 def prepend_hash_to_key(key: str) -> str:
@@ -33,26 +28,10 @@ fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
 
 
-msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_10/")
-
-
-existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
-
-partitioning_params = {
-    "msin": inputs,
-    "num_partitions": 2,
-    "msout": msout,
-}
-
-future = fexec.call_async(partitioner.partition_ms, partitioning_params)
-
-result = fexec.get_result()
-
-logger.info(f"Partitioning result can be found at {result}.")
-
 # Rebinning parameters, partitioning results are sent to msin
+
 rebinning_params = {
-    "msin": result,
+    "msin": inputs,
     "steps": "[aoflag, avg, count]",
     "aoflag.type": "aoflagger",
     "aoflag.strategy": InputS3(
@@ -220,6 +199,9 @@ start_time = time.time()
 finished_job = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL).run(
     func_limit=1
 )
+current_workflow.add_completed_step(finished_job)
+
+logger.info(finished_job)
 end_time = time.time()
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 

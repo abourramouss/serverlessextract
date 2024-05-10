@@ -5,6 +5,7 @@ from .datasource import DataSource
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import PosixPath
 from radiointerferometry.datasource import InputS3, OutputS3
+from radiointerferometry.profiling import time_it
 
 KB = 1024
 MB = KB * KB
@@ -41,10 +42,9 @@ def local_path_to_s3(
 
 
 class LithopsDataSource(DataSource):
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         self.storage = Storage()
+        self.time_records = []
 
     def exists(self, path: OutputS3) -> bool:
         """Check if a file exists in an S3 bucket."""

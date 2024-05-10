@@ -2,6 +2,36 @@ import os
 import subprocess as sp
 from pathlib import PosixPath
 import logging
+import requests
+from lithops.utils import get_executor_id
+
+
+def detect_runtime_environment():
+    if "AWS_LAMBDA_FUNCTION_NAME" in os.environ:
+        return ("AWS Lambda", None)
+
+    try:
+        token_response = requests.put(
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+            timeout=1,
+        )
+        if token_response.status_code == 200:
+            token = token_response.text
+            response = requests.get(
+                "http://169.254.169.254/latest/meta-data/instance-type",
+                headers={"X-aws-ec2-metadata-token": token},
+                timeout=1,
+            )
+            if response.status_code == 200:
+                return ("Amazon EC2", response.text)
+    except requests.exceptions.RequestException:
+        pass
+
+    if "KUBERNETES_SERVICE_HOST" in os.environ:
+        return ("Kubernetes", None)
+
+    return ("Unknown", None)
 
 
 def get_memory_limit_cgroupv2():
@@ -95,3 +125,8 @@ def setup_logging(level):
     logger.addHandler(handler)
 
     return logger
+
+
+def get_executor_id_lithops():
+    lithops_exec_id = get_executor_id().split("-")[0]
+    return lithops_exec_id
