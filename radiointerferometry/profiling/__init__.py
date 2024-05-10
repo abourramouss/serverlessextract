@@ -7,4 +7,8 @@ from .profiler import (
     DiskMetric,
     NetworkMetric,
 )
-from .profilercollection import CompletedStep, Workflow, WorkflowCollection
+from .profilercollection import (
+    CompletedStep,
+    CompletedWorkflow,
+    CompletedWorkflowsCollection,
+)

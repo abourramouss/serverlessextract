@@ -325,34 +325,27 @@ class MetricCollector:
         for proc in process_list:
             pid = proc.pid
 
-            # Collect Memory Metrics
             memory_metric = self.memory_collector.collect_metric(pid, index)
             if memory_metric is not None:
                 self.memory_metrics.append(memory_metric)
 
-            # Collect Disk Metrics
             timestamp = time.time()
             current_counter = psutil.Process(pid).io_counters()
             disk_read_mb = current_counter.read_bytes / 1024.0**2
             disk_write_mb = current_counter.write_bytes / 1024.0**2
 
-            # Initialize rates as zero
             disk_read_rate_mb = 0
             disk_write_rate_mb = 0
 
-            # Find the previous metric for the same PID, if it exists
             prev_disk_metric = next(
                 (metric for metric in reversed(self.disk_metrics) if metric.pid == pid),
                 None,
             )
 
             if prev_disk_metric:
-                # Calculate time difference
                 time_diff = timestamp - prev_disk_metric.timestamp
 
-                # Ensure positive time difference
                 if time_diff > 0:
-                    # Calculate disk read and write rates
                     disk_read_rate_mb = (
                         disk_read_mb - prev_disk_metric.disk_read_mb
                     ) / time_diff
@@ -360,7 +353,6 @@ class MetricCollector:
                         disk_write_mb - prev_disk_metric.disk_write_mb
                     ) / time_diff
 
-            # Create and append the new disk metric
             disk_metric = DiskMetric(
                 timestamp=timestamp,
                 pid=pid,
@@ -372,12 +364,10 @@ class MetricCollector:
             )
             self.disk_metrics.append(disk_metric)
 
-            # Collect CPU Metrics
             cpu_metric = self.cpu_collector.collect_metric(pid, index)
             if cpu_metric is not None:
                 self.cpu_metrics.append(cpu_metric)
 
-        # Collect Network Metrics, these are global
         current_net_counters = psutil.net_io_counters(pernic=False)
         net_read_mb = current_net_counters.bytes_recv / 1024.0**2
         net_write_mb = current_net_counters.bytes_sent / 1024.0**2
@@ -406,7 +396,7 @@ class MetricCollector:
             collection_id=index,
         )
         self.network_metrics.append(network_metric)
-
+        # Maybe timestamped metrics aren't needed and duration is just collection ids.
         time.sleep(1)
 
     def update(self, received_data):
@@ -429,11 +419,16 @@ class MetricCollector:
 
 class Profiler:
     def __init__(self):
+        # The attributes with none are passed delayed, after worker execution
         self.worker_id = None
+        self.worker_ingested_key = None
         self.worker_start_tstamp = None
         self.worker_end_tstamp = None
+        self.worker_chunk_size = None
+        self.worker_cold_start = None
         self.metrics = MetricCollector()
         self.function_timers = []
+        self.worker_cost = None
 
     def __len__(self):
         return len(self.metrics)
@@ -467,10 +462,21 @@ class Profiler:
         if "worker_end_tstamp" in data:
             profiler.worker_end_tstamp = data["worker_end_tstamp"]
 
+        if "worker_chunk_size" in data:
+            profiler.worker_chunk_size = data["worker_chunk_size"]
+
+        if "worker_cost" in data:
+            profiler.worker_cost = data["worker_cost"]
+
+        if "worker_cold_start" in data:
+            profiler.worker_cold_start = data["worker_cold_start"]
+
+        if "worker_ingested_key" in data:
+            profiler.worker_ingested_key = data["worker_ingested_key"]
         return profiler
 
     def __repr__(self):
-        return f"Profiler(worker_id={self.worker_id}, worker_start_tstamp={self.worker_start_tstamp}, worker_end_tstamp={self.worker_end_tstamp}, metrics={self.metrics}, function_timers={self.function_timers})"
+        return f"Profiler(worker_id={self.worker_id}, worker_start_tstamp={self.worker_start_tstamp}, worker_end_tstamp={self.worker_end_tstamp}, metrics={self.metrics}, function_timers={self.function_timers}, worker_cost={self.worker_cost})"
 
     def start_profiling(self, conn, monitored_process_pid):
         index = 0
@@ -500,8 +506,12 @@ class Profiler:
     def to_dict(self):
         return {
             "worker_id": self.worker_id,
+            "worker_ingested_key": self.worker_ingested_key,
             "worker_start_tstamp": self.worker_start_tstamp,
             "worker_end_tstamp": self.worker_end_tstamp,
+            "worker_chunk_size": self.worker_chunk_size,
+            "worker_cost": self.worker_cost,
+            "worker_cold_start": self.worker_cold_start,
             "metrics": self.metrics.to_dict(),
             "function_timers": [timer.to_dict() for timer in self.function_timers],
         }
