@@ -143,7 +143,11 @@ class DP3Step:
         memory_limit = get_memory_limit_cgroupv2()
         cpu_limit = get_cpu_limit_cgroupv2()
         msin = parameter_list[0]["msin"]
-        chunk_size = f"{round(int(lithops.Storage().head_object(msin.bucket, msin.key)['content-length']) / 1024 ** 2, 2)} MB"
+        chunk_size = round(
+            int(lithops.Storage().head_object(msin.bucket, msin.key)["content-length"])
+            / 1024**2,
+            2,
+        )
 
         self.__logger.info(f"Memory Limit: {memory_limit} GB")
         self.__logger.info(f"CPU Limit: {cpu_limit}")
@@ -156,7 +160,7 @@ class DP3Step:
 
         profiler.worker_id = id
         profiler.worker_chunk_size = chunk_size
-        profiler.ingested_key = parameter_list[0]["msin"]
+        profiler.worker_ingested_key = parameter_list[0]["msin"]
         profiler.function_timers = function_timers
 
         env, instance_type = detect_runtime_environment()
@@ -191,7 +195,7 @@ class DP3Step:
                 dynamic_key = f"{v.key}/{file_name_suffix}.{v.file_ext}"
                 new_params[k] = InputS3(bucket=bucket, key=dynamic_key)
 
-        return new_params
+        return [new_params]
 
     def run_command(self, cmd, log_output):
         with open(log_output, "w") as log_file:
@@ -201,8 +205,8 @@ class DP3Step:
         return stdout, stderr
 
     def run(self, func_limit: Optional[int] = None, step_name: Optional[str] = None):
-        runtime_memory = 10000
-        cpus_per_worker = 6
+        runtime_memory = 500
+        cpus_per_worker = 1
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(
             log_level=self.__log_level,
@@ -216,18 +220,27 @@ class DP3Step:
         keys = lithops.Storage().list_keys(bucket=bucket, prefix=prefix)[:func_limit]
 
         self.__logger.info(f"keys : {keys}")
-        # This is wrong
-        chunk_size = f"{round(int(lithops.Storage().head_object(bucket, keys[0])['content-length']) / 1024 ** 2, 2)} MB"
+
+        step_ingested_size = sum(
+            round(
+                int(lithops.Storage().head_object(bucket, key)["content-length"])
+                / 1024**2,
+                2,
+            )
+            for key in keys
+        )
+
+        ingested_data = 0
 
         function_params = [
-            [
-                self.__construct_params_for_key(params, key, bucket)
-                for key in keys
-                for params in self.__parameters
-            ]
+            self.__construct_params_for_key(params, key, bucket)
+            for key in keys
+            for params in self.__parameters
         ]
 
-        self.__logger.info(f"Function params: {function_params}")
+        self.__logger.info(
+            f"Function params: {function_params} and length {len(function_params)}"
+        )
         start_time = time.time()
 
         futures = function_executor.map(
@@ -244,6 +257,11 @@ class DP3Step:
             profiled_workers[worker_id]["profiler"].worker_end_tstamp = futures[
                 worker_id
             ].stats["worker_end_tstamp"]
+
+            profiled_workers[worker_id]["profiler"].worker_cold_start = (
+                futures[worker_id].stats["worker_start_tstamp"]
+                - futures[worker_id].stats["host_submit_tstamp"]
+            )
             worker_duration = (
                 futures[worker_id].stats["worker_end_tstamp"]
                 - futures[worker_id].stats["worker_start_tstamp"]
@@ -259,12 +277,15 @@ class DP3Step:
 
             profilers.append(profiled_workers[worker_id]["profiler"])
             step_cost += worker_cost
+            ingested_data += profiled_workers[worker_id]["profiler"].worker_chunk_size
 
         # assertion: sum of keys sizes is the same as step_ingested_size.
+        assert step_ingested_size == ingested_data
+
         completed_step = CompletedStep(
             step_id=get_executor_id_lithops(),
             step_name=step_name,
-            step_ingested_size=0,
+            step_ingested_size=step_ingested_size,
             step_cost=step_cost,
             memory=runtime_memory,
             cpus_per_worker=cpus_per_worker,
