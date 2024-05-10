@@ -6,14 +6,15 @@ from radiointerferometry.steps.imaging import ImagingStep
 from radiointerferometry.steps.pipelinestep import DP3Step
 from radiointerferometry.datasource import InputS3, OutputS3
 from radiointerferometry.partitioning import StaticPartitioner
-from radiointerferometry.profiling import Workflow, WorkflowCollection
+from radiointerferometry.profiling import (
+    CompletedWorkflow,
+    CompletedWorkflowsCollection,
+)
 
 
 # Logger setup
 LOG_LEVEL = logging.INFO
 logger = setup_logging(LOG_LEVEL)
-collection_run_workflows = WorkflowCollection()
-current_workflow = Workflow()
 partitioner = StaticPartitioner(log_level=LOG_LEVEL)
 
 
@@ -194,16 +195,24 @@ imaging_params = [
     ),
 ]
 
+
+file_path = "profilers.json"
+completed_workflows = CompletedWorkflowsCollection(file_path)
+current_workflow = CompletedWorkflow()
 # Execute Rebinning
 start_time = time.time()
-finished_job = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL).run(
-    func_limit=1
-)
-current_workflow.add_completed_step(finished_job)
+rebinning_runner = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL)
 
-logger.info(finished_job)
+completed_step = rebinning_runner(func_limit=1, step_name="rebinning")
+
+current_workflow.add_completed_step(completed_step)
 end_time = time.time()
+
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
+
+completed_workflows.add_completed_workflow(current_workflow)
+completed_workflows.save_to_file(file_path)
+
 
 """
 
