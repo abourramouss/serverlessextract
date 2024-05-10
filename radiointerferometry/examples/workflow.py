@@ -24,9 +24,30 @@ def prepend_hash_to_key(key: str) -> str:
 
 fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
 
+# Input ms's are stored here
+inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
+
+# Where to store the output ms's after partitioning
+msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_10zip/")
+
+
+existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
+
+# The partitioning params are the input ms, the number of partitions, and the output ms.
+partitioning_params = {
+    "msin": inputs,
+    "num_partitions": 10,
+    "msout": msout,
+}
+
+future = fexec.call_async(partitioner.partition_ms, partitioning_params)
+
+result = fexec.get_result()
+
+logger.info(f"Partitioning result: {result}")
 
 # Create partitions beforehand from s3
-inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
+inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_total_10zip/")
 
 
 # Rebinning parameters, partitioning results are sent to msin
@@ -203,7 +224,7 @@ current_workflow = CompletedWorkflow()
 start_time = time.time()
 rebinning_runner = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL)
 
-completed_step = rebinning_runner(func_limit=1, step_name="rebinning")
+completed_step = rebinning_runner(step_name="rebinning")
 
 current_workflow.add_completed_step(completed_step)
 end_time = time.time()

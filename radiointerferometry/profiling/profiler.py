@@ -419,10 +419,13 @@ class MetricCollector:
 
 class Profiler:
     def __init__(self):
+        # The attributes with none are passed delayed, after worker execution
         self.worker_id = None
+        self.worker_ingested_key = None
         self.worker_start_tstamp = None
         self.worker_end_tstamp = None
         self.worker_chunk_size = None
+        self.worker_cold_start = None
         self.metrics = MetricCollector()
         self.function_timers = []
         self.worker_cost = None
@@ -465,6 +468,11 @@ class Profiler:
         if "worker_cost" in data:
             profiler.worker_cost = data["worker_cost"]
 
+        if "worker_cold_start" in data:
+            profiler.worker_cold_start = data["worker_cold_start"]
+
+        if "worker_ingested_key" in data:
+            profiler.worker_ingested_key = data["worker_ingested_key"]
         return profiler
 
     def __repr__(self):
@@ -498,10 +506,12 @@ class Profiler:
     def to_dict(self):
         return {
             "worker_id": self.worker_id,
+            "worker_ingested_key": self.worker_ingested_key,
             "worker_start_tstamp": self.worker_start_tstamp,
             "worker_end_tstamp": self.worker_end_tstamp,
             "worker_chunk_size": self.worker_chunk_size,
             "worker_cost": self.worker_cost,
+            "worker_cold_start": self.worker_cold_start,
             "metrics": self.metrics.to_dict(),
             "function_timers": [timer.to_dict() for timer in self.function_timers],
         }
