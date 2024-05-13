@@ -1,21 +1,57 @@
 import psutil
 import time
-import os
-from multiprocessing import Process, Pipe
 import contextlib
 import json
-import requests
-from dataclasses import dataclass, asdict, fields
+from dataclasses import dataclass, asdict, fields, field
+from enum import Enum
+from multiprocessing import Process, Pipe
 
 
-def time_it(label, function, time_records, *args, **kwargs):
+class Type(Enum):
+    READ = 1
+    COMPUTE = 2
+    WRITE = 3
+
+
+@dataclass
+class FunctionTimer:
+    label: str
+    start_time: float
+    end_time: float
+    duration: float
+    operation_type: Type = field(default=None)
+
+    def to_dict(self):
+        dict_repr = asdict(self)
+        dict_repr["operation_type"] = (
+            self.operation_type.name if self.operation_type else None
+        )
+        return dict_repr
+
+    @classmethod
+    def from_dict(cls, data):
+        if "operation_type" in data and data["operation_type"] is not None:
+            data["operation_type"] = Type[data["operation_type"]]
+        return cls(**data)
+
+    def __repr__(self) -> str:
+        return (
+            f"FunctionTimer(label={self.label}, start_time={self.start_time}, "
+            f"end_time={self.end_time}, duration={self.duration}, "
+            f"operation_type={self.operation_type.name if self.operation_type else 'None'})"
+        )
+
+
+def time_it(label, function, function_type, time_records, *args, **kwargs):
     print(f"label: {label}, type of function: {type(function)}")
 
     start_time = time.time()
     result = function(*args, **kwargs)
     end_time = time.time()
 
-    record = FunctionTimer(label, start_time, end_time, (end_time - start_time))
+    record = FunctionTimer(
+        label, start_time, end_time, (end_time - start_time), function_type
+    )
     time_records.append(record)
 
     return result
@@ -45,24 +81,6 @@ def profiling_context(monitored_process_pid):
             monitoring_process.terminate()
         parent_conn.close()
         child_conn.close()
-
-
-@dataclass
-class FunctionTimer:
-    label: str
-    start_time: float
-    end_time: float
-    duration: float
-
-    def to_dict(self):
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def __repr__(self) -> str:
-        return f"FunctionTimer(label={self.label}, start_time={self.start_time}, end_time={self.end_time}, duration={self.duration})"
 
 
 @dataclass

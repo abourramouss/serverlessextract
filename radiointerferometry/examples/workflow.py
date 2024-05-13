@@ -33,6 +33,10 @@ msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_10zip
 
 existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
 
+"""
+
+
+
 # The partitioning params are the input ms, the number of partitions, and the output ms.
 partitioning_params = {
     "msin": inputs,
@@ -45,7 +49,7 @@ future = fexec.call_async(partitioner.partition_ms, partitioning_params)
 result = fexec.get_result()
 
 logger.info(f"Partitioning result: {result}")
-
+"""
 # Create partitions beforehand from s3
 inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_total_10zip/")
 
@@ -220,11 +224,12 @@ imaging_params = [
 file_path = "profilers.json"
 completed_workflows = CompletedWorkflowsCollection(file_path)
 current_workflow = CompletedWorkflow()
+
 # Execute Rebinning
 start_time = time.time()
 rebinning_runner = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL)
 
-completed_step = rebinning_runner(step_name="rebinning")
+completed_step = rebinning_runner(step_name="rebinning", func_limit=1)
 
 current_workflow.add_completed_step(completed_step)
 end_time = time.time()
