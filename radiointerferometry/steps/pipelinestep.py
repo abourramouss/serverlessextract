@@ -10,6 +10,8 @@ from pathlib import PosixPath
 from radiointerferometry.profiling import (
     profiling_context,
     CompletedStep,
+    Type,
+    time_it,
 )
 from radiointerferometry.datasource import (
     LithopsDataSource,
@@ -27,7 +29,8 @@ from radiointerferometry.utils import (
     get_executor_id_lithops,
 )
 
-from radiointerferometry.profiling import time_it
+
+from flexexecutor import FlexExecutor
 
 
 class DP3Step:
@@ -62,6 +65,7 @@ class DP3Step:
                 path = time_it(
                     "Download directory",
                     data_source.download_directory,
+                    Type.READ,
                     time_records,
                     val,
                     working_dir,
@@ -82,7 +86,11 @@ class DP3Step:
                     if path.suffix.lower() == ".zip":
                         # Timing the unzip
                         path = time_it(
-                            "Unzip file", data_source.unzip, time_records, path
+                            "Unzip file",
+                            data_source.unzip,
+                            Type.READ,
+                            time_records,
+                            path,
                         )
                         self.__logger.debug(f"Extracting zip file at {path}")
                     else:
@@ -106,7 +114,12 @@ class DP3Step:
         log_output = params["log_output"]
 
         stdout, stderr = time_it(
-            "Execute DP3 command", self.run_command, time_records, cmd, log_output
+            "Execute DP3 command",
+            self.run_command,
+            Type.COMPUTE,
+            time_records,
+            cmd,
+            log_output,
         )
 
         self.__logger.info(f"DP3 execution log saved to {params['log_output']}")
@@ -120,12 +133,14 @@ class DP3Step:
                     zip_path = time_it(
                         "Zip without compression",
                         data_source.zip_without_compression,
+                        Type.WRITE,
                         time_records,
                         key,
                     )
                     time_it(
                         "Upload file",
                         data_source.upload_file,
+                        Type.WRITE,
                         time_records,
                         zip_path,
                         local_path_to_s3(zip_path),
@@ -208,11 +223,18 @@ class DP3Step:
         runtime_memory = 500
         cpus_per_worker = 1
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
+
+        lithops_fexec_parameters = {"log_level": self.__log_level}
+
+        function_executor = FlexExecutor(lithops_fexec_parameters)
+
+        """
         function_executor = lithops.FunctionExecutor(
             log_level=self.__log_level,
             runtime_memory=runtime_memory,
             runtime_cpu=cpus_per_worker,
         )
+        """
 
         bucket = self.__parameters[0]["msin"].bucket
         prefix = self.__parameters[0]["msin"].key
@@ -278,12 +300,26 @@ class DP3Step:
             profilers.append(profiled_workers[worker_id]["profiler"])
             step_cost += worker_cost
             ingested_data += profiled_workers[worker_id]["profiler"].worker_chunk_size
+            write = 0
+            compute = 0
+            read = 0
+            for timing in profiled_workers[worker_id]["profiler"].function_timers:
+                if timing.operation_type == Type.WRITE:
+                    write += timing.duration
+                elif timing.operation_type == Type.COMPUTE:
+                    compute += timing.duration
+                elif timing.operation_type == Type.READ:
+                    read += timing.duration
 
-        # assertion: sum of keys sizes is the same as step_ingested_size.
+        
+        # assertion: sum of keys sizes ingested by the workers is the same as step_ingested_size.
         assert step_ingested_size == ingested_data
 
         completed_step = CompletedStep(
             step_id=get_executor_id_lithops(),
+            total_write_time=write,
+            total_compute_time=compute,
+            total_read_time=read,
             step_name=step_name,
             step_ingested_size=step_ingested_size,
             step_cost=step_cost,

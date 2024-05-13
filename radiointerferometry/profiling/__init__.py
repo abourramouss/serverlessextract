@@ -6,6 +6,7 @@ from .profiler import (
     MemoryMetric,
     DiskMetric,
     NetworkMetric,
+    Type,
 )
 from .profilercollection import (
     CompletedStep,

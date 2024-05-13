@@ -8,6 +8,9 @@ from radiointerferometry.profiling import Profiler
 @dataclass
 class CompletedStep:
     step_name: str
+    total_write_time: float  # seconds
+    total_compute_time: float  # seconds
+    total_read_time: float  # seconds
     step_cost: float  # In dollars
     step_ingested_size: str  # In mb
     memory: int
@@ -23,6 +26,9 @@ class CompletedStep:
     def to_dict(self):
         return {
             "step_name": self.step_name,
+            "total_write_time": self.total_write_time,
+            "total_compute_time": self.total_compute_time,
+            "total_read_time": self.total_read_time,
             "step_id": self.step_id,
             "step_cost": self.step_cost,
             "step_ingested_size": self.step_ingested_size,
@@ -41,6 +47,9 @@ class CompletedStep:
         profilers = [Profiler.from_dict(p) for p in data["profilers"]]
         return cls(
             step_name=data["step_name"],
+            total_write_time=data["total_write_time"],
+            total_compute_time=data["total_compute_time"],
+            total_read_time=data["total_read_time"],
             step_cost=data["step_cost"],
             step_ingested_size=data["step_ingested_size"],
             memory=data["memory"],
@@ -65,6 +74,12 @@ class CompletedWorkflow:
 
     def __iter__(self):
         return iter(self.completed_steps)
+
+    def __getitem__(self, index):
+        return self.completed_steps[index]
+
+    def __len__(self):
+        return len(self.completed_steps)
 
     def add_completed_step(self, completed_step: CompletedStep):
         self.completed_steps.append(completed_step)
@@ -116,3 +131,19 @@ class CompletedWorkflowsCollection:
             for index, workflow_data in data.items():
                 workflow = CompletedWorkflow.from_dict(workflow_data)
                 self.add_completed_workflow(workflow)
+
+    def find_steps_by_attributes(
+        self, step_name, number_workers, memory, cpus_per_worker, ingested_size
+    ):
+        matching_steps = []
+        for workflow in self.completed_workflows:
+            for step in workflow:
+                if (
+                    step.step_name == step_name
+                    and step.number_workers == number_workers
+                    and step.memory == memory
+                    and step.cpus_per_worker == cpus_per_worker
+                    and step.step_ingested_size == ingested_size
+                ):
+                    matching_steps.append(step)
+        return matching_steps
