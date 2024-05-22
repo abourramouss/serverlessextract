@@ -14,8 +14,7 @@ from radiointerferometry.datasource import (
     local_path_to_s3,
 )
 from radiointerferometry.utils import detect_runtime_environment
-from radiointerferometry.profiling import profiling_context, CompletedStep
-from radiointerferometry.profiling import time_it
+from radiointerferometry.profiling import profiling_context, CompletedStep, Type, time_it
 from utils import setup_logging
 
 
@@ -48,15 +47,17 @@ class ImagingStep:
         # Initialize an empty list to store partition paths
         partitions = []
         for partition in ms:
+            self._logger.info("Partition: {partition}")
             partition_path = time_it(
                 "download_ms",
                 data_source.download_directory,
+                Type.READ,
                 time_records,
                 partition,
                 base_path=working_dir,
             )
             partition_path = time_it(
-                "unzip", data_source.unzip, time_records, partition_path
+                "unzip", data_source.unzip, Type.READ, time_records, partition_path
             )
 
             partitions.append(str(partition_path))
@@ -186,6 +187,11 @@ class ImagingStep:
         profiler.worker_start_tstamp = future.stats["worker_start_tstamp"]
         profiler.worker_end_tstamp = future.stats["worker_end_tstamp"]
 
+
+
+        """
+        
+        
         completed_step = CompletedStep(
             memory=runtime_memory,
             cpus_per_worker=cpus_per_worker,
@@ -199,3 +205,4 @@ class ImagingStep:
         )
 
         return completed_step
+        """

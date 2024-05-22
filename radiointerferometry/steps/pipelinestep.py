@@ -30,9 +30,6 @@ from radiointerferometry.utils import (
 )
 
 
-from flexexecutor import FlexExecutor
-
-
 class DP3Step:
     def __init__(self, parameters: List[Dict], log_level):
         if isinstance(parameters, dict):
@@ -170,8 +167,10 @@ class DP3Step:
         self.__logger.info(f"parameter list: {parameter_list}")
 
         with profiling_context(os.getpid()) as profiler:
+            function_timers = []
             for param in parameter_list:
-                function_timers = self.execute_step(param, id=id)
+                timers = self.execute_step(param, id=id)
+                function_timers.extend(timers)
 
         profiler.worker_id = id
         profiler.worker_chunk_size = chunk_size
@@ -210,7 +209,7 @@ class DP3Step:
                 dynamic_key = f"{v.key}/{file_name_suffix}.{v.file_ext}"
                 new_params[k] = InputS3(bucket=bucket, key=dynamic_key)
 
-        return [new_params]
+        return new_params
 
     def run_command(self, cmd, log_output):
         with open(log_output, "w") as log_file:
@@ -226,16 +225,12 @@ class DP3Step:
 
         lithops_fexec_parameters = {"log_level": self.__log_level}
 
-        function_executor = FlexExecutor(lithops_fexec_parameters)
-
-        """
         function_executor = lithops.FunctionExecutor(
             log_level=self.__log_level,
             runtime_memory=runtime_memory,
             runtime_cpu=cpus_per_worker,
         )
-        """
-
+        
         bucket = self.__parameters[0]["msin"].bucket
         prefix = self.__parameters[0]["msin"].key
 
@@ -255,9 +250,8 @@ class DP3Step:
         ingested_data = 0
 
         function_params = [
-            self.__construct_params_for_key(params, key, bucket)
+            [self.__construct_params_for_key(params, key, bucket) for params in self.__parameters]
             for key in keys
-            for params in self.__parameters
         ]
 
         self.__logger.info(
@@ -311,7 +305,6 @@ class DP3Step:
                 elif timing.operation_type == Type.READ:
                     read += timing.duration
 
-        
         # assertion: sum of keys sizes ingested by the workers is the same as step_ingested_size.
         assert step_ingested_size == ingested_data
 
