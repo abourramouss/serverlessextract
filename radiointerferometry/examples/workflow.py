@@ -221,9 +221,6 @@ imaging_params = [
 ]
 
 
-file_path = "profilers.json"
-completed_workflows = CompletedWorkflowsCollection(file_path)
-current_workflow = CompletedWorkflow()
 
 # Execute Rebinning
 start_time = time.time()
@@ -231,16 +228,11 @@ rebinning_runner = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL)
 
 completed_step = rebinning_runner(step_name="rebinning", func_limit=1)
 
-current_workflow.add_completed_step(completed_step)
 end_time = time.time()
 
 logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 
-completed_workflows.add_completed_workflow(current_workflow)
-completed_workflows.save_to_file(file_path)
 
-
-"""
 
 # Execute Calibration
 start_time = time.time()
@@ -264,4 +256,3 @@ finished_job = ImagingStep(
 end_time = time.time()
 logger.info(f"Imaging completed in {end_time - start_time} seconds.")
 
-"""
