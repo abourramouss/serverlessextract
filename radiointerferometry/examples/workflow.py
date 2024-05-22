@@ -31,10 +31,6 @@ inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1
 msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_10zip/")
 
 
-existing_keys = lithops.Storage().list_keys(msout.bucket, msout.key)
-
-"""
-
 
 
 # The partitioning params are the input ms, the number of partitions, and the output ms.
@@ -49,15 +45,12 @@ future = fexec.call_async(partitioner.partition_ms, partitioning_params)
 result = fexec.get_result()
 
 logger.info(f"Partitioning result: {result}")
-"""
-# Create partitions beforehand from s3
-inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_total_10zip/")
 
 
 # Rebinning parameters, partitioning results are sent to msin
 
 rebinning_params = {
-    "msin": inputs,
+    "msin": result,
     "steps": "[aoflag, avg, count]",
     "aoflag.type": "aoflagger",
     "aoflag.strategy": InputS3(
