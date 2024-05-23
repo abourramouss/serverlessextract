@@ -13,9 +13,8 @@ from radiointerferometry.datasource import (
     s3_to_local_path,
     local_path_to_s3,
 )
-from radiointerferometry.utils import detect_runtime_environment
+from radiointerferometry.utils import detect_runtime_environment, setup_logging
 from radiointerferometry.profiling import profiling_context, CompletedStep, Type, time_it
-from utils import setup_logging
 
 
 class ImagingStep:
