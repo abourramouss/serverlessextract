@@ -13,8 +13,9 @@ from radiointerferometry.datasource import (
     s3_to_local_path,
     local_path_to_s3,
 )
-from radiointerferometry.utils import detect_runtime_environment, setup_logging
+from radiointerferometry.utils import detect_runtime_environment
 from radiointerferometry.profiling import profiling_context, CompletedStep, Type, time_it
+from radiointerferometry.utils import setup_logging
 
 
 class ImagingStep:
@@ -126,7 +127,7 @@ class ImagingStep:
     ):
         # Parameters to optimize
         runtime_memory = 2000
-        cpus_per_worker = 4
+        cpus_per_worker = 2
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(
             runtime_memory=runtime_memory,
