@@ -22,13 +22,13 @@ def prepend_hash_to_key(key: str) -> str:
     return f"{get_executor_id_lithops()}/{key}"
 
 
-fexec = lithops.FunctionExecutor(runtime_memory=2048, runtime_cpu=4)
+fexec = lithops.FunctionExecutor( log_level=LOG_LEVEL)
 
 # Input ms's are stored here
-inputs = InputS3(bucket="ayman-extract", key="partitions/partitions_7900_20zip_1/")
+inputs = InputS3(bucket="ayman-extract", key="partitions/partition_1/")
 
 # Where to store the output ms's after partitioning
-msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_10zip/")
+msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_20zip/")
 
 
 
@@ -36,7 +36,7 @@ msout = OutputS3(bucket="ayman-extract", key=f"partitions/partitions_total_10zip
 # The partitioning params are the input ms, the number of partitions, and the output ms.
 partitioning_params = {
     "msin": inputs,
-    "num_partitions": 10,
+    "num_partitions": 20,
     "msout": msout,
 }
 
