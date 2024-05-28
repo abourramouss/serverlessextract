@@ -54,10 +54,16 @@ class InputS3(S3Path):
 
 class OutputS3(S3Path):
     def __init__(
-        self, bucket: str, key: str, file_ext: str = None, file_name: str = None
+        self,
+        bucket: str,
+        key: str,
+        file_ext: str = None,
+        file_name: str = None,
+        upload: bool = True,
     ):
         super().__init__(bucket, key, file_ext)
         self._file_name = file_name
+        self.upload = upload
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -129,6 +135,10 @@ class DataSource(ABC):
         extract_path = ms.parent / ms.stem
         if not extract_path.exists():
             extract_path.mkdir(parents=True, exist_ok=True)
+        else:
+            logging.warning(f"Already exists")
+            return extract_path
+
         with zipfile.ZipFile(ms, "r") as zipf:
             zip_contents = zipf.namelist()
             logging.debug(f"Zip contents: {zip_contents}")
@@ -143,4 +153,5 @@ class DataSource(ABC):
             else:
                 zipf.extractall(extract_path)
                 logging.info(f"Extracted to directory: {extract_path}")
+
         return extract_path

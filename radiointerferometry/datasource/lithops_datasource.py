@@ -56,6 +56,11 @@ class LithopsDataSource(DataSource):
         if isinstance(read_path, InputS3):
             try:
                 local_path = s3_to_local_path(read_path, base_local_dir=str(base_path))
+
+                if local_path.exists():
+                    print(f"File {local_path} already exists locally.")
+                    return local_path
+
                 os.makedirs(local_path.parent, exist_ok=True)
 
                 # Download file uses the default config

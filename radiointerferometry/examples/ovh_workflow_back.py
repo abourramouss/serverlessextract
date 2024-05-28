@@ -32,7 +32,7 @@ fexec = lithops.FunctionExecutor(
 inputs = InputS3(bucket=BUCKET, key="partitions/partition_1/")
 
 # Where to store the output ms's after partitioning
-msout = OutputS3(bucket=BUCKET, key=f"partitions/partitions_total_5zip_2/")
+msout = OutputS3(bucket=BUCKET, key=f"partitions/partitions_total_5zip/")
 
 
 # The partitioning params are the input ms, the number of partitions, and the output ms.
@@ -64,7 +64,7 @@ rebinning_params = {
     "avg.timestep": 8,
     "msout": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/ms"),
+        key=prepend_hash_to_key("rebinning_out/ms"),
         file_ext="ms",
     ),
     "numthreads": 4,
@@ -80,10 +80,10 @@ rebinning_params = {
 calibration_params = {
     "msin": InputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/ms"),
+        key=prepend_hash_to_key("rebinning_out/ms"),
     ),
-    "msin.datacolumn": "DATA",
     "msout": ".",
+    "msin.datacolumn": "DATA",
     "steps": "[cal]",
     "cal.type": "ddecal",
     "cal.mode": "diagonal",
@@ -93,7 +93,7 @@ calibration_params = {
     ),
     "cal.h5parm": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/cal/h5"),
+        key=prepend_hash_to_key("cal_out/cal/h5"),
         file_ext="h5",
     ),
     "cal.solint": 4,
@@ -102,21 +102,17 @@ calibration_params = {
     "cal.uvlambdamin": 5,
     "cal.smoothnessconstraint": 2e6,
     "numthreads": 4,
-    "msout": OutputS3(
-        bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/ms"),
-        file_ext="ms",
-    ),
     "log_output": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/cal/logs"),
+        key=prepend_hash_to_key("cal_out/cal/logs"),
         file_ext="log",
     ),
 }
 
 # Subtraction parameters with hash included in the key as a root directory
 substraction = {
-    "msin": InputS3(bucket=BUCKET, key=prepend_hash_to_key("applycal_out/ms")),
+    "msin": InputS3(bucket=BUCKET, key=prepend_hash_to_key("rebinning_out/ms")),
+    "msout": ".",
     "msin.datacolumn": "DATA",
     "msout.datacolumn": "SUBTRACTED_DATA",
     "steps": "[sub]",
@@ -129,7 +125,7 @@ substraction = {
     "sub.operation": "subtract",
     "sub.applycal.parmdb": InputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/cal/h5"),
+        key=prepend_hash_to_key("cal_out/cal/h5"),
         dynamic=True,
         file_ext="h5",
     ),
@@ -137,25 +133,20 @@ substraction = {
     "sub.applycal.correction": "fulljones",
     "sub.applycal.sub_apply_amp.correction": "amplitude000",
     "sub.applycal.sub_apply_phase.correction": "phase000",
-    "msout": OutputS3(
-        bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/ms"),
-        file_ext="ms",
-    ),
     "log_output": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/substract/logs"),
+        key=prepend_hash_to_key("cal_out/substract/logs"),
         file_ext="log",
     ),
 }
 
 # Apply calibration parameters with hash included in the key as a root directory
 apply_calibration = {
-    "msin": InputS3(bucket=BUCKET, key=prepend_hash_to_key("applycal_out/ms")),
+    "msin": InputS3(bucket=BUCKET, key=prepend_hash_to_key("rebinning_out/ms")),
     "msin.datacolumn": "SUBTRACTED_DATA",
     "msout": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/ms"),
+        key=prepend_hash_to_key("rebinning_out/ms"),
         file_ext="ms",
     ),
     "msout.datacolumn": "CORRECTED_DATA",
@@ -167,13 +158,13 @@ apply_calibration = {
     "apply.direction": "[Main]",
     "apply.parmdb": InputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/cal/h5"),
+        key=prepend_hash_to_key("cal_out/cal/h5"),
         dynamic=True,
         file_ext="h5",
     ),
     "log_output": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("applycal_out/apply/logs"),
+        key=prepend_hash_to_key("cal_out/apply/logs"),
         file_ext="log",
     ),
 }
@@ -240,7 +231,7 @@ logger.info(f"Calibration completed in {end_time - start_time} seconds.")
 # Execute Imaging
 start_time = time.time()
 finished_job = ImagingStep(
-    input_data_path=InputS3(bucket=BUCKET, key=prepend_hash_to_key("applycal_out/ms")),
+    input_data_path=InputS3(bucket=BUCKET, key=prepend_hash_to_key("rebinning_out/ms")),
     parameters=imaging_params,
     log_level=LOG_LEVEL,
 ).run()
