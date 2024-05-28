@@ -59,11 +59,9 @@ class OutputS3(S3Path):
         key: str,
         file_ext: str = None,
         file_name: str = None,
-        upload: bool = True,
     ):
         super().__init__(bucket, key, file_ext)
         self._file_name = file_name
-        self.upload = upload
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
