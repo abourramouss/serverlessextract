@@ -14,7 +14,12 @@ from radiointerferometry.datasource import (
     local_path_to_s3,
 )
 from radiointerferometry.utils import detect_runtime_environment
-from radiointerferometry.profiling import profiling_context, CompletedStep, Type, time_it
+from radiointerferometry.profiling import (
+    profiling_context,
+    CompletedStep,
+    Type,
+    time_it,
+)
 from radiointerferometry.utils import setup_logging
 
 
@@ -110,7 +115,6 @@ class ImagingStep:
 
         self._logger.info(f"Worker executing step with {len(ms)} ms paths")
 
-        # Call the actual execution step
         with profiling_context(os.getpid()) as profiler:
             function_timers = self.execute_step(ms, parameters)
 
@@ -123,11 +127,10 @@ class ImagingStep:
 
     def run(
         self,
-        func_limit: Optional[int] = None,
     ):
         # Parameters to optimize
-        runtime_memory = 2000
-        cpus_per_worker = 2
+        runtime_memory = 4000
+        cpus_per_worker = 4
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(
             runtime_memory=runtime_memory,
@@ -142,15 +145,10 @@ class ImagingStep:
 
         if f"{self._input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
-        if func_limit:
-            keys = keys[:func_limit]
-
         ms = [
             S3Path.from_bucket_key(bucket=self._input_data_path.bucket, key=partition)
             for partition in keys
         ]
-
-        chunk_size = f"{lithops.Storage().head_object(self._input_data_path.bucket, keys[0])['content-length']}/{1024**2}"
 
         self._parameters.extend(["-j", str(cpus_per_worker)])
         parameters = pickle.dumps(self._parameters)
@@ -186,8 +184,6 @@ class ImagingStep:
 
         profiler.worker_start_tstamp = future.stats["worker_start_tstamp"]
         profiler.worker_end_tstamp = future.stats["worker_end_tstamp"]
-
-
 
         """
         

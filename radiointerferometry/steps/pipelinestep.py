@@ -124,7 +124,7 @@ class DP3Step:
         self.__logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
 
         for key, val in directories.items():
-            if os.path.exists(key):
+            if os.path.exists(key) and val.upload:  # Check the upload flag
                 self.__logger.debug(f"Path exists, proceeding to zip: {key}")
                 try:
                     zip_path = time_it(
@@ -230,7 +230,7 @@ class DP3Step:
             runtime_memory=runtime_memory,
             runtime_cpu=cpus_per_worker,
         )
-        
+
         bucket = self.__parameters[0]["msin"].bucket
         prefix = self.__parameters[0]["msin"].key
 
@@ -250,7 +250,10 @@ class DP3Step:
         ingested_data = 0
 
         function_params = [
-            [self.__construct_params_for_key(params, key, bucket) for params in self.__parameters]
+            [
+                self.__construct_params_for_key(params, key, bucket)
+                for params in self.__parameters
+            ]
             for key in keys
         ]
 
