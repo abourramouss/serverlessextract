@@ -87,28 +87,25 @@ RUN git clone https://gitlab.com/aroffringa/aoflagger.git /AOFlagger \
 # Install EveryBeam
 RUN git clone https://git.astron.nl/RD/EveryBeam.git /EveryBeam \
 	&& cd /EveryBeam \
-	&& git checkout v0.5.2 \
 	&& mkdir build && cd build \
 	&& cmake .. \
 	&& make -j8 \
 	&& make install \
 	&& cd / && rm -rf /EveryBeam
 
-
 # Install WSClean
-RUN git clone --recursive https://gitlab.com/aroffringa/wsclean.git /wsclean \
+RUN git clone --recursive -j8  https://gitlab.com/aroffringa/wsclean.git /wsclean \
 	&& cd /wsclean \
-	&& git checkout v3.4 \
 	&& mkdir build && cd build \
-	&& cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=/usr -DUSE_OPENMP=ON -DBUILD_GUI=OFF .. \
+	&& cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=/usr \
+	-DUSE_OPENMP=ON -DBUILD_GUI=OFF .. \
 	&& make -j8 \
 	&& make install \
 	&& cd / && rm -rf /wsclean
 
 # Install DP3
-RUN git clone https://git.astron.nl/RD/DP3.git /DP3 \
+RUN git clone https://github.com/lofar-astron/DP3.git /DP3 \
 	&& cd /DP3 \
-	&& git checkout v6.0 \
 	&& mkdir build && cd build \
 	&& cmake .. \
 	&& make -j8 \
