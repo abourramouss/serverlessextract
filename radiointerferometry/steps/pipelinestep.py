@@ -124,7 +124,7 @@ class DP3Step:
         self.__logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
 
         for key, val in directories.items():
-            if os.path.exists(key) and val.upload:  # Check the upload flag
+            if os.path.exists(key):
                 self.__logger.debug(f"Path exists, proceeding to zip: {key}")
                 try:
                     zip_path = time_it(
