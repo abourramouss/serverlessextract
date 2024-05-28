@@ -35,6 +35,10 @@ ceph:
 
 ```
 
+After configuring lithops, it's important to download the kubectl file from the ovh managed kubernetes cluster and download it. This downloaded file should be pasted into ~/.kube/config, so lithops knows we will be using that kubernetes cluster.
+
+![alt text](image.png)
+
 
 ## Building and Deploying Custom Runtime
 
