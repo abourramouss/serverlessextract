@@ -29,30 +29,12 @@ fexec = lithops.FunctionExecutor(
 )
 
 # Input ms's are stored here
-inputs = InputS3(bucket=BUCKET, key="partitions/partition_1/")
-
-# Where to store the output ms's after partitioning
-msout = OutputS3(bucket=BUCKET, key=f"partitions/partitions_total_5zip_2/")
-
-
-# The partitioning params are the input ms, the number of partitions, and the output ms.
-partitioning_params = {
-    "msin": inputs,
-    "num_partitions": 5,
-    "msout": msout,
-}
-
-future = fexec.call_async(partitioner.partition_ms, partitioning_params)
-
-result = fexec.get_result()
-
-logger.info(f"Partitioning result: {result}")
-
+inputs = InputS3(bucket=BUCKET, key="partitions/partitions_total_5zip_2/")
 
 # Rebinning parameters, partitioning results are sent to msin
 
 rebinning_params = {
-    "msin": result,
+    "msin": inputs,
     "steps": "[aoflag, avg, count]",
     "aoflag.type": "aoflagger",
     "aoflag.strategy": InputS3(
