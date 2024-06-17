@@ -6,10 +6,6 @@ from radiointerferometry.steps.imaging import ImagingStep
 from radiointerferometry.steps.pipelinestep import DP3Step
 from radiointerferometry.datasource import InputS3, OutputS3
 from radiointerferometry.partitioning import StaticPartitioner
-from radiointerferometry.profiling import (
-    CompletedWorkflow,
-    CompletedWorkflowsCollection,
-)
 
 
 # Logger setup
@@ -168,7 +164,7 @@ imaging_params = [
     "-pol",
     "I",
     "-scale",
-    "5arcmin",
+    "2arcmin",
     "-niter",
     "100000",
     "-gain",
@@ -183,6 +179,8 @@ imaging_params = [
     "-make-psf",
     "-auto-threshold",
     "3",
+    "-parallel-deconvolution",
+    "4096",
     "-weight",
     "briggs",
     "0",
