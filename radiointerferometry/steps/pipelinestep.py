@@ -90,6 +90,16 @@ class DP3Step:
                             path,
                         )
                         self.__logger.debug(f"Extracting zip file at {path}")
+                        unzipped_contents = os.listdir(path)
+                        self.__logger.info(
+                            f"Contents of {path} after unzip: {unzipped_contents}"
+                        )
+                        # Sometimes a zip file contains a single directory with the contents, in which case we adjust the path
+                        if len(unzipped_contents) == 1 and os.path.isdir(
+                            os.path.join(path, unzipped_contents[0])
+                        ):
+                            path = os.path.join(path, unzipped_contents[0])
+                            self.__logger.info(f"Adjusted path after unzip: {path}")
                     else:
                         self.__logger.debug(f"Path {path} is a recognized file type.")
 
