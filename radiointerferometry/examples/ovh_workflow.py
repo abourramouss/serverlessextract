@@ -29,7 +29,7 @@ fexec = lithops.FunctionExecutor(
 )
 
 # Input ms's are stored here
-inputs = InputS3(bucket=BUCKET, key="partitions/partitions_total_5zip_2/")
+inputs = InputS3(bucket=BUCKET, key="10gb_dataset")
 
 # Rebinning parameters, partitioning results are sent to msin
 
