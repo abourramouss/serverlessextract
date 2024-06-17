@@ -129,8 +129,8 @@ class ImagingStep:
         self,
     ):
         # Parameters to optimize
-        runtime_memory = 4000
-        cpus_per_worker = 4
+        runtime_memory = 8000
+        cpus_per_worker = 10
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
         function_executor = lithops.FunctionExecutor(
             runtime_memory=runtime_memory,
