@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from pathlib import PosixPath
+from pathlib import PosixPath, Path
 from s3path import S3Path
 import zipfile
 import os
@@ -96,7 +96,7 @@ class DataSource(ABC):
             for key, value in parset_dict.items():
                 f.write(f"{key}={value}\n")
 
-    def zip_without_compression(self, ms: PosixPath) -> PosixPath:
+    def zip_without_compression(self, ms: Path) -> Path:
         logging.info(f"Starting zipping process for: {ms}")
         zip_filepath = ms.with_name(ms.name + ".zip")
 
@@ -112,46 +112,35 @@ class DataSource(ABC):
             with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_STORED) as zipf:
                 for root, dirs, files in os.walk(ms):
                     for file in files:
-                        file_path = PosixPath(root) / file
-                        arcname = file_path.relative_to(ms)
+                        file_path = Path(root) / file
+                        arcname = ms.name / file_path.relative_to(ms)
                         zipf.write(file_path, arcname)
-        elif ms.is_file():
-            with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_STORED) as zipf:
-                arcname = ms.name
-                zipf.write(ms, arcname)
         else:
-            logging.error(f"{ms} is neither a file nor a directory.")
-            raise FileNotFoundError(f"No such file or directory: {ms}")
+            logging.error(f"{ms} is not a directory.")
+            raise NotADirectoryError(f"Expected a directory, got {ms}")
 
         logging.info(f"Created zip file at {zip_filepath}")
         return zip_filepath
 
-    def unzip(self, ms: PosixPath) -> PosixPath:
+    def unzip(self, ms: Path) -> Path:
         logging.info(f"Extracting zip file at {ms}")
         if ms.suffix != ".zip":
             logging.error(f"Expected a .zip file, got {ms}")
             raise ValueError(f"Expected a .zip file, got {ms}")
 
-        extract_path = ms.parent / ms.stem
-        if not extract_path.exists():
-            extract_path.mkdir(parents=True, exist_ok=True)
-        else:
-            logging.warning(f"Already exists")
-            return extract_path
+        extract_path = ms.parent
+        logging.info(f"Extracting to directory: {extract_path}")
 
         with zipfile.ZipFile(ms, "r") as zipf:
             zip_contents = zipf.namelist()
             logging.debug(f"Zip contents: {zip_contents}")
-            if (
-                len(zip_contents) == 1
-                and PosixPath(zip_contents[0]).name == zip_contents[0]
-            ):
-                single_file_path = extract_path / zip_contents[0]
-                zipf.extract(zip_contents[0], extract_path)
-                logging.info(f"Extracted single file to: {single_file_path}")
-                return single_file_path
-            else:
-                zipf.extractall(extract_path)
-                logging.info(f"Extracted to directory: {extract_path}")
 
-        return extract_path
+            zipf.extractall(extract_path)
+
+            extracted_dir = extract_path / ms.stem
+
+        ms.unlink()
+        logging.info(f"Deleted zip file at {ms}")
+
+        logging.info(f"Extracted to directory: {extracted_dir}")
+        return extracted_dir
