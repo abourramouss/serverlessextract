@@ -3,6 +3,7 @@ import time
 import os
 import subprocess as sp
 import copy
+import shutil
 
 from typing import Dict, List, Optional
 from pathlib import PosixPath
@@ -89,6 +90,8 @@ class DP3Step:
                             time_records,
                             path,
                         )
+
+                        print(f"Extracting zip file at {path}")
                         self.__logger.debug(f"Extracting zip file at {path}")
                         unzipped_contents = os.listdir(path)
                         self.__logger.info(
@@ -98,7 +101,22 @@ class DP3Step:
                         if len(unzipped_contents) == 1 and os.path.isdir(
                             os.path.join(path, unzipped_contents[0])
                         ):
-                            path = os.path.join(path, unzipped_contents[0])
+
+                            print(f"unzipped_contents: {path}")
+
+                            source_dir = os.path.join(path, unzipped_contents[0])
+
+                            for f in os.listdir(source_dir):
+                                print(
+                                    f"current path: { os.path.join(source_dir, f)}, path to move: {os.path.join(path, f)}"
+                                )
+                                shutil.move(
+                                    os.path.join(source_dir, f), os.path.join(path, f)
+                                )
+                            shutil.rmtree(source_dir)
+                            # path = os.path.join(path, unzipped_contents[0])
+                            print(path)
+                            print(f"unzipped_contents: {unzipped_contents}")
                             self.__logger.info(f"Adjusted path after unzip: {path}")
                     else:
                         self.__logger.debug(f"Path {path} is a recognized file type.")
@@ -144,13 +162,22 @@ class DP3Step:
                         time_records,
                         key,
                     )
+                    if val.remote_ow:
+                        s3_path = PosixPath(
+                            str.replace(str(zip_path), val.key, val.remote_ow)
+                        )
+                        s3_path = local_path_to_s3(s3_path)
+                    else:
+                        s3_path = local_path_to_s3(zip_path)
+
+                    print(f"Uploading file to s3: {s3_path}")
                     time_it(
                         "Upload file",
                         data_source.upload_file,
                         Type.WRITE,
                         time_records,
                         zip_path,
-                        local_path_to_s3(zip_path),
+                        s3_path,
                     )
                 except IsADirectoryError as e:
                     self.__logger.error(f"Error while zipping: {e}")
@@ -223,14 +250,16 @@ class DP3Step:
 
     def run_command(self, cmd, log_output):
         with open(log_output, "w") as log_file:
+
+            # FIXME: Add error handling if there's an out of memory exception
             proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
             stdout, stderr = proc.communicate()
             log_file.write(f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}")
         return stdout, stderr
 
     def run(self, func_limit: Optional[int] = None, step_name: Optional[str] = None):
-        runtime_memory = 500
-        cpus_per_worker = 1
+        runtime_memory = 2048
+        cpus_per_worker = 2
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
 
         lithops_fexec_parameters = {"log_level": self.__log_level}
