@@ -68,10 +68,11 @@ class DP3Step:
                     val,
                     working_dir,
                 )
-                self.__logger.debug(
+                print(f"Path {path}")
+                self.__logger.info(
                     f"Downloaded path type: {'Directory' if path.is_dir() else 'File'} at {path}"
                 )
-                self.__logger.debug(
+                self.__logger.info(
                     f"Checking path: {path}, Type: {type(path)}, Exists: {path.exists()}, Is File: {path.is_file()}"
                 )
 
@@ -82,7 +83,6 @@ class DP3Step:
                         f"Path {path} is a file with extension {path.suffix}"
                     )
                     if path.suffix.lower() == ".zip":
-                        # Timing the unzip
                         path = time_it(
                             "Unzip file",
                             data_source.unzip,
@@ -90,34 +90,11 @@ class DP3Step:
                             time_records,
                             path,
                         )
-
-                        print(f"Extracting zip file at {path}")
-                        self.__logger.debug(f"Extracting zip file at {path}")
-                        unzipped_contents = os.listdir(path)
+                        unzipped_contents = os.listdir(path.parent)
                         self.__logger.info(
-                            f"Contents of {path} after unzip: {unzipped_contents}"
+                            f"Contents of {unzipped_contents} after unzip: {os.listdir(path)}"
                         )
-                        # Sometimes a zip file contains a single directory with the contents, in which case we adjust the path
-                        if len(unzipped_contents) == 1 and os.path.isdir(
-                            os.path.join(path, unzipped_contents[0])
-                        ):
 
-                            print(f"unzipped_contents: {path}")
-
-                            source_dir = os.path.join(path, unzipped_contents[0])
-
-                            for f in os.listdir(source_dir):
-                                print(
-                                    f"current path: { os.path.join(source_dir, f)}, path to move: {os.path.join(path, f)}"
-                                )
-                                shutil.move(
-                                    os.path.join(source_dir, f), os.path.join(path, f)
-                                )
-                            shutil.rmtree(source_dir)
-                            # path = os.path.join(path, unzipped_contents[0])
-                            print(path)
-                            print(f"unzipped_contents: {unzipped_contents}")
-                            self.__logger.info(f"Adjusted path after unzip: {path}")
                     else:
                         self.__logger.debug(f"Path {path} is a recognized file type.")
 
@@ -153,32 +130,55 @@ class DP3Step:
 
         for key, val in directories.items():
             if os.path.exists(key):
-                self.__logger.debug(f"Path exists, proceeding to zip: {key}")
+                self.__logger.debug(f"Path exists, proceeding to process: {key}")
                 try:
-                    zip_path = time_it(
-                        "Zip without compression",
-                        data_source.zip_without_compression,
-                        Type.WRITE,
-                        time_records,
-                        key,
-                    )
-                    if val.remote_ow:
-                        s3_path = PosixPath(
-                            str.replace(str(zip_path), val.key, val.remote_ow)
+                    if os.path.isdir(key):
+                        self.__logger.debug(f"Zipping directory: {key}")
+                        zip_path = time_it(
+                            "Zip without compression",
+                            data_source.zip_without_compression,
+                            Type.WRITE,
+                            time_records,
+                            key,
                         )
-                        s3_path = local_path_to_s3(s3_path)
-                    else:
-                        s3_path = local_path_to_s3(zip_path)
+                        if val.remote_ow:
+                            s3_path = PosixPath(
+                                str.replace(str(zip_path), val.key, val.remote_ow)
+                            )
+                            s3_path = local_path_to_s3(s3_path)
+                        else:
+                            s3_path = local_path_to_s3(zip_path)
 
-                    print(f"Uploading file to s3: {s3_path}")
-                    time_it(
-                        "Upload file",
-                        data_source.upload_file,
-                        Type.WRITE,
-                        time_records,
-                        zip_path,
-                        s3_path,
-                    )
+                        print(f"Uploading zip file to S3: {s3_path}")
+                        time_it(
+                            "Upload file",
+                            data_source.upload_file,
+                            Type.WRITE,
+                            time_records,
+                            zip_path,
+                            s3_path,
+                        )
+                    elif os.path.isfile(key):
+                        self.__logger.debug(f"Uploading file: {key}")
+                        if val.remote_ow:
+                            s3_path = PosixPath(
+                                str.replace(str(key), val.key, val.remote_ow)
+                            )
+                            s3_path = local_path_to_s3(s3_path)
+                        else:
+                            s3_path = local_path_to_s3(key)
+
+                        print(f"Uploading file to S3: {s3_path}")
+                        time_it(
+                            "Upload file",
+                            data_source.upload_file,
+                            Type.WRITE,
+                            time_records,
+                            key,
+                            s3_path,
+                        )
+                    else:
+                        self.__logger.error(f"{key} is neither a file nor a directory.")
                 except IsADirectoryError as e:
                     self.__logger.error(f"Error while zipping: {e}")
 
