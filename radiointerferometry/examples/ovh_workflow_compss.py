@@ -196,33 +196,45 @@ imaging_params = [
 ]
 
 
-# Execute Rebinning
-start_time = time.time()
-rebinning_runner = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL)
+if "__main__" == __name__:
+    # Execute Rebinning
+    @task(returns=int)
+    def rebinning_step():
+        start_time = time.time()
+        rebinning_runner = DP3Step(parameters=rebinning_params, log_level=LOG_LEVEL)
 
-completed_step = rebinning_runner(step_name="rebinning")
+        completed_step = rebinning_runner(step_name="rebinning", func_limit=1)
 
-end_time = time.time()
+        end_time = time.time()
 
-logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
+        logger.info(f"Rebinning completed in {end_time - start_time} seconds.")
 
+        return 1
 
-# Execute Calibration
-start_time = time.time()
-finished_job = DP3Step(
-    parameters=[calibration_params, substraction, apply_calibration],
-    log_level=LOG_LEVEL,
-).run()
-end_time = time.time()
-logger.info(f"Calibration completed in {end_time - start_time} seconds.")
+    # Execute Calibration
+    @task(returns=int)
+    def calibration_step(rebinning_output):
+        start_time = time.time()
+        finished_job = DP3Step(
+            parameters=[calibration_params, substraction, apply_calibration],
+            log_level=LOG_LEVEL,
+        ).run()
+        end_time = time.time()
+        logger.info(f"Calibration completed in {end_time - start_time} seconds.")
 
+        return 1
 
-# Execute Imaging
-start_time = time.time()
-finished_job = ImagingStep(
-    input_data_path=InputS3(bucket=BUCKET, key=prepend_hash_to_key("applycal_out/ms")),
-    parameters=imaging_params,
-    log_level=LOG_LEVEL,
-).run()
-end_time = time.time()
-logger.info(f"Imaging completed in {end_time - start_time} seconds.")
+    # Execute Imaging
+    @task(returns=int)
+    def imaging_step(calibration_output):
+        start_time = time.time()
+        finished_job = ImagingStep(
+            input_data_path=InputS3(
+                bucket="ayman-extract", key=prepend_hash_to_key("applycal_out/ms")
+            ),
+            parameters=imaging_params,
+            log_level=LOG_LEVEL,
+        ).run()
+        end_time = time.time()
+        logger.info(f"Imaging completed in {end_time - start_time} seconds.")
+        return 1

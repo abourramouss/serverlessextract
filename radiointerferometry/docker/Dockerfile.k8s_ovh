@@ -6,55 +6,55 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install basic dependencies
 RUN apt-get update && apt-get install -y \
-	apt-utils \
-	ca-certificates \
-	curl \
-	lsb-release \
-	software-properties-common \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+    apt-utils \
+    ca-certificates \
+    curl \
+    lsb-release \
+    software-properties-common \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python 3.10 and pip
 RUN apt-get update && apt-get install -y \
-	software-properties-common \
-	&& add-apt-repository ppa:deadsnakes/ppa \
-	&& apt-get update && apt-get install -y \
-	python3.10 \
-	python3.10-dev \
-	python3.10-distutils \
-	python3-pip \
-	python3-setuptools \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-dev \
+    python3.10-distutils \
+    python3-pip \
+    python3-setuptools \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install pip for Python 3.10
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
-	&& python3.10 get-pip.py \
-	&& rm get-pip.py
+    && python3.10 get-pip.py \
+    && rm get-pip.py
 
 # Ensure system-wide installation of six and urllib3 modules
 RUN apt-get update && apt-get install -y python3-six python3-urllib3
 
 # Install initial dependencies
 RUN apt-get update && apt-get install -y \
-	zip redis-server curl \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+    zip redis-server curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install casacore-data-tai-utc and configure it separately
 RUN apt-get update && apt-get install -y \
-	casacore-data-tai-utc \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+    casacore-data-tai-utc \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Ensure casacore-data-tai-utc is properly configured
 RUN dpkg --configure -a
 
 # Install casacore-data and configure it separately
 RUN apt-get update && apt-get install -y \
-	casacore-data \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+    casacore-data \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Ensure casacore-data is properly configured
 RUN dpkg --configure -a
@@ -64,67 +64,67 @@ FROM base AS dependencies
 
 # Install initial dependencies
 RUN apt-get update && apt-get install -y \
-	zip redis-server curl \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+    zip redis-server curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and setuptools, and install Python packages
 RUN python3.10 -m pip install --upgrade setuptools pip
 
 # Install Python packages
 RUN python3.10 -m pip install --no-cache-dir \
-	flask \
-	pika \
-	boto3 \
-	ibm-cloud-sdk-core \
-	ibm-cos-sdk \
-	redis \
-	gevent \
-	requests \
-	PyYAML \
-	kubernetes \
-	numpy \
-	cloudpickle \
-	ps-mem \
-	tblib \
-	matplotlib \
-	psutil \
-	scipy \
-	wrapt \
-	python-casacore
+    flask \
+    pika \
+    boto3 \
+    ibm-cloud-sdk-core \
+    ibm-cos-sdk \
+    redis \
+    gevent \
+    requests \
+    PyYAML \
+    kubernetes \
+    numpy \
+    cloudpickle \
+    ps-mem \
+    tblib \
+    matplotlib \
+    psutil \
+    scipy \
+    wrapt \
+    python-casacore
 
 # Stage 3: Install additional system dependencies
 FROM dependencies AS system-dependencies
 
 RUN apt-get update && apt-get install -y \
-	g++ \
-	libboost-all-dev \
-	libhdf5-serial-dev \
-	libfftw3-dev \
-	libcfitsio-dev \
-	libarmadillo-dev \
-	liblog4cplus-dev \
-	libopenblas-dev \
-	liblapack-dev \
-	git \
-	wcslib-dev \
-	casacore-dev \
-	casacore-tools \
-	libpython3-dev \
-	libgsl-dev \
-	liblua5.3-dev \
-	libpng-dev \
-	libgtkmm-3.0-dev \
-	ninja-build \
-	pkg-config \
-	swig \
-	wget \
-	unzip \
-	flex \
-	bison \
-	ninja-build \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+    g++ \
+    libboost-all-dev \
+    libhdf5-serial-dev \
+    libfftw3-dev \
+    libcfitsio-dev \
+    libarmadillo-dev \
+    liblog4cplus-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    git \
+    wcslib-dev \
+    casacore-dev \
+    casacore-tools \
+    libpython3-dev \
+    libgsl-dev \
+    liblua5.3-dev \
+    libpng-dev \
+    libgtkmm-3.0-dev \
+    ninja-build \
+    pkg-config \
+    swig \
+    wget \
+    unzip \
+    flex \
+    bison \
+    ninja-build \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y make libssl-dev && rm -rf /var/lib/apt/lists/*
 
@@ -132,10 +132,10 @@ RUN apt-get update && apt-get install -y make libssl-dev && rm -rf /var/lib/apt/
 FROM system-dependencies AS cmake-install
 
 RUN wget https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1.tar.gz \
-	&& tar -xzvf cmake-3.21.1.tar.gz \
-	&& cd cmake-3.21.1 \
-	&& ./bootstrap && make -j8 && make install \
-	&& cd / && rm -rf cmake-3.21.1.tar.gz cmake-3.21.1
+    && tar -xzvf cmake-3.21.1.tar.gz \
+    && cd cmake-3.21.1 \
+    && ./bootstrap && make -j8 && make install \
+    && cd / && rm -rf cmake-3.21.1.tar.gz cmake-3.21.1
 
 ENV OPENBLAS_NUM_THREADS=1
 
@@ -143,46 +143,46 @@ ENV OPENBLAS_NUM_THREADS=1
 FROM cmake-install AS aoflagger-install
 
 RUN git clone https://gitlab.com/aroffringa/aoflagger.git /AOFlagger \
-	&& cd /AOFlagger \
-	&& mkdir build && cd build \
-	&& cmake .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /AOFlagger
+    && cd /AOFlagger \
+    && mkdir build && cd build \
+    && cmake .. \
+    && make -j8 \
+    && make install \
+    && cd / && rm -rf /AOFlagger
 
 # Stage 6: Install EveryBeam
 FROM aoflagger-install AS everybeam-install
 
 RUN git clone https://git.astron.nl/RD/EveryBeam.git /EveryBeam \
-	&& cd /EveryBeam \
-	&& mkdir build && cd build \
-	&& cmake .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /EveryBeam
+    && cd /EveryBeam \
+    && mkdir build && cd build \
+    && cmake .. \
+    && make -j8 \
+    && make install \
+    && cd / && rm -rf /EveryBeam
 
 # Stage 7: Install WSClean
 FROM everybeam-install AS wsclean-install
 
 RUN git clone --recursive -j8 https://gitlab.com/aroffringa/wsclean.git /wsclean \
-	&& cd /wsclean \
-	&& mkdir build && cd build \
-	&& cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=/usr \
-	-DUSE_OPENMP=ON -DBUILD_GUI=OFF .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /wsclean
+    && cd /wsclean \
+    && mkdir build && cd build \
+    && cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX=/usr \
+    -DUSE_OPENMP=ON -DBUILD_GUI=OFF .. \
+    && make -j8 \
+    && make install \
+    && cd / && rm -rf /wsclean
 
 # Stage 8: Install DP3
 FROM wsclean-install AS dp3-install
 
 RUN git clone https://github.com/lofar-astron/DP3.git /DP3 \
-	&& cd /DP3 \
-	&& mkdir build && cd build \
-	&& cmake .. \
-	&& make -j8 \
-	&& make install \
-	&& cd / && rm -rf /DP3
+    && cd /DP3 \
+    && mkdir build && cd build \
+    && cmake .. \
+    && make -j8 \
+    && make install \
+    && cd / && rm -rf /DP3
 
 # Final stage: Application setup
 FROM dp3-install AS final
