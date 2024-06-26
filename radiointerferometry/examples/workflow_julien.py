@@ -41,36 +41,40 @@ print(prepend_hash_to_key("dummy_key"))
 # Rebinning parameters with hash included in the key as a root directory, notice how we use the result from the partitioning step
 
 # CALIBRATOR REBINNING PARAMS
-CAL_rebinning_params = {
-    "msin": inputs,
-    "steps": "[aoflag, avg, count]",
-    "aoflag.type": "aoflagger",
-    "aoflag.strategy": InputS3(
-        bucket=BUCKET,
-        key="parameters/rebinning/STEP1-NenuFAR64C1S.lua",
-    ),
-    "avg.type": "averager",
-    "avg.freqstep": 5,
-    "avg.timestep": 2,
+TARGET_apply_calibration = {
+    "msin": InputS3(bucket=BUCKET, key=prepend_hash_to_key("TAR/rebinning_out/ms")),
+    "msin.datacolumn": "DATA",
     "msout": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("CAL/rebinning_out/ms"),
+        key=prepend_hash_to_key("TAR/rebinning_out/ms"),
         file_ext="ms",
+        remote_key_ow=prepend_hash_to_key("TAR/applycal_out/ms"),
     ),
-    "numthreads": 4,
+    "msout.datacolumn": "CORRECTED_DATA",
+    "steps": "[apply]",
+    "apply.type": "applycal",
+    "apply.steps": "[apply_amp,apply_phase]",
+    "apply.apply_amp.correction": "amplitude000",
+    "apply.apply_phase.correction": "phase000",
+    "apply.direction": "[Main]",
+    "apply.parmdb": InputS3(
+        bucket=BUCKET,
+        key=prepend_hash_to_key("CAL/calibration_out/h5"),
+        dynamic=True,
+        file_ext="h5",
+    ),
     "log_output": OutputS3(
         bucket=BUCKET,
-        key=prepend_hash_to_key("CAL/rebinning_out/logs"),
+        key=prepend_hash_to_key("TAR/applycal_out/logs"),
         file_ext="log",
     ),
 }
 
 
-# CALIBRATOR REBINNING
+# TARGET CALIBRATION (APPLY)
 start_time = time.time()
-finished_job = DP3Step(parameters=CAL_rebinning_params, log_level=LOG_LEVEL).run(
+finished_job = DP3Step(parameters=TARGET_apply_calibration, log_level=LOG_LEVEL).run(
     func_limit=1
 )
-
 end_time = time.time()
-logger.info(f"CAL Rebinning completed in {end_time - start_time} seconds.")
+logger.info(f"TAR APPLYCAL completed in {end_time - start_time} seconds.")

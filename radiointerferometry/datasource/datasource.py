@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from pathlib import PosixPath, Path
+from pathlib import Path, Path
 from s3path import S3Path
 import zipfile
 import os
@@ -11,11 +11,15 @@ logging.basicConfig(
 )
 
 
-class S3Path:
-    def __init__(self, bucket: str, key: str, file_ext: str = None):
+class S3PathBase:
+    def __init__(
+        self, bucket: str, key: str, file_ext: str = None, base_local_path: str = "/tmp"
+    ):
         self._bucket = bucket
         self._key = key
         self._file_ext = file_ext
+        self._base_local_path = base_local_path if base_local_path else "/tmp"
+        self.local_path = None
 
     @property
     def bucket(self):
@@ -37,22 +41,48 @@ class S3Path:
     def file_ext(self):
         return self._file_ext
 
+    @property
+    def base_local_path(self):
+        return self._base_local_path
+
+    @base_local_path.setter
+    def base_local_path(self, value):
+        self._base_local_path = value if value else "/tmp"
+
     def __repr__(self):
-        return f"/{self._bucket}/{self._key}{('.' + self._file_ext if self._file_ext else '')}"
+        return f"{self._base_local_path}/{self._bucket}/{self._key}{('.' + self._file_ext if self._file_ext else '')}"
 
     def __str__(self):
         return self.__repr__()
 
+    def to_local_path(self, remote_key_ow=None):
+        return LocalPath(
+            self._base_local_path,
+            self._bucket,
+            self._key,
+            self._file_ext,
+            remote_key_ow,
+        )
 
-class InputS3(S3Path):
+
+class InputS3(S3PathBase):
     def __init__(
-        self, bucket: str, key: str, file_ext: str = None, dynamic: bool = False
+        self,
+        bucket: str,
+        key: str,
+        file_ext: str = None,
+        dynamic: bool = False,
+        base_local_path: str = "/tmp",
     ):
-        super().__init__(bucket, key, file_ext)
+        super().__init__(bucket, key, file_ext, base_local_path)
         self.dynamic = dynamic
+        print(
+            f"Initialized InputS3 with bucket: {bucket}, key: {key}, file_ext: {file_ext}, "
+            f"dynamic: {dynamic}, base_local_path: {self._base_local_path}"
+        )
 
 
-class OutputS3(S3Path):
+class OutputS3(S3PathBase):
     def __init__(
         self,
         bucket: str,
@@ -60,10 +90,67 @@ class OutputS3(S3Path):
         file_ext: str = None,
         file_name: str = None,
         remote_key_ow: str = None,
+        base_local_path: str = "/tmp",
     ):
-        super().__init__(bucket, key, file_ext)
+        super().__init__(bucket, key, file_ext, base_local_path)
         self._file_name = file_name
         self.remote_ow = remote_key_ow
+        print(
+            f"Initialized OutputS3 with bucket: {bucket}, key: {key}, file_ext: {file_ext}, "
+            f"file_name: {file_name}, remote_key_ow: {remote_key_ow}, base_local_path: {self._base_local_path}"
+        )
+
+    @property
+    def file_name(self):
+        return self._file_name
+
+    def get_local_path(self):
+        return LocalPath(
+            self._base_local_path,
+            self._bucket,
+            self._key,
+            self._file_ext,
+            self.remote_ow,
+        )
+
+    def __repr__(self):
+        return f"OutputS3(bucket={self._bucket}, key={self._key}, file_ext={self._file_ext}, file_name={self._file_name}, remote_key_ow={self.remote_ow}, base_local_path={self._base_local_path})"
+
+
+class LocalPath(Path):
+    _flavour = type(Path())._flavour
+
+    def __new__(cls, base_local_path, bucket, key, file_ext=None, remote_key_ow=None):
+        path_str = (
+            f"{base_local_path}/{bucket}/{key}{('.' + file_ext if file_ext else '')}"
+        )
+        obj = super().__new__(cls, path_str)
+        obj._init(base_local_path, bucket, key, file_ext, remote_key_ow)
+        return obj
+
+    def _init(self, base_local_path, bucket, key, file_ext, remote_key_ow):
+        self.base_local_path = base_local_path
+        self.bucket = bucket
+        self.key = key
+        self.file_ext = file_ext
+        self.remote_key_ow = remote_key_ow
+
+    def __str__(self):
+        return f"{self.base_local_path}/{self.bucket}/{self.key}{('.' + self.file_ext if self.file_ext else '')}"
+
+    @property
+    def parent(self):
+        return Path(f"{self.base_local_path}/{self.bucket}/{self.key}").parent
+
+    def get_remote_path(self):
+        return OutputS3(
+            bucket=self.bucket,
+            key=self.key,
+            file_ext=self.file_ext,
+            file_name=self.name,
+            remote_key_ow=self.remote_key_ow,
+            base_local_path=self.base_local_path,
+        )
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
@@ -76,19 +163,15 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
-    def download_file(self, read_path: S3Path, write_path: PosixPath) -> None:
+    def download_file(self, read_path: S3Path, write_path: Path) -> None:
         pass
 
     @abstractmethod
-    def download_directory(self, read_path: S3Path, write_path: PosixPath) -> None:
+    def download(self, read_path: S3Path, write_path: Path) -> None:
         pass
 
     @abstractmethod
-    def upload_file(self, read_path: PosixPath, write_path: PosixPath) -> None:
-        pass
-
-    @abstractmethod
-    def upload_directory(self, read_path: PosixPath, write_path: PosixPath) -> None:
+    def upload(self, read_path: Path, write_path: Path) -> None:
         pass
 
     def write_parset_dict_to_file(self, parset_dict: dict, filename: str):
@@ -96,9 +179,11 @@ class DataSource(ABC):
             for key, value in parset_dict.items():
                 f.write(f"{key}={value}\n")
 
-    def zip_without_compression(self, ms: Path) -> Path:
+    def zip_without_compression(self, ms: LocalPath) -> LocalPath:
         logging.info(f"Starting zipping process for: {ms}")
-        zip_filepath = ms.with_name(ms.name + ".zip")
+        zip_filepath = LocalPath(
+            ms.base_local_path, ms.bucket, ms.key + ".zip", ms.file_ext
+        )
 
         if zip_filepath.exists() and zip_filepath.is_dir():
             logging.error(

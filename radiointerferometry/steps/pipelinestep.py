@@ -6,7 +6,7 @@ import copy
 import shutil
 
 from typing import Dict, List, Optional
-from pathlib import PosixPath
+from pathlib import Path
 
 from radiointerferometry.profiling import (
     profiling_context,
@@ -18,8 +18,8 @@ from radiointerferometry.datasource import (
     LithopsDataSource,
     InputS3,
     OutputS3,
-    s3_to_local_path,
     local_path_to_s3,
+    LocalPath,
 )
 from radiointerferometry.utils import (
     dict_to_parset,
@@ -46,23 +46,25 @@ class DP3Step:
     ):
         return self.run(func_limit=func_limit, step_name=step_name)
 
-    def execute_step(self, params: dict, id=None):
+    def execute_step(self, params: dict, id):
         time_records = []
-        working_dir = PosixPath(os.getenv("HOME"))
+        working_dir = Path(os.getenv("HOME"))
         data_source = LithopsDataSource()
-
+        print(params)
+        dp3_params = params.copy()
         self.__logger.info(
-            f"Worker id: {id} started execution with parameters: {params}"
+            f"Worker id: {id} started execution with parameters: {dp3_params}"
         )
 
-        directories = {}
-        for key, val in params.items():
+        # FIXME: Instead of passing only the directories, pass the params object itself, with input and output keys.
+        # To be able to do this, we need to use InputS3 and OutputS3 objects in the params dict, with a local_path attribute.
+
+        for key, val in dp3_params.items():
             if isinstance(val, InputS3):
                 self.__logger.info(f"Downloading data for key {key} from S3: {val}")
-
                 path = time_it(
                     "Download directory",
-                    data_source.download_directory,
+                    data_source.download,
                     Type.READ,
                     time_records,
                     val,
@@ -98,23 +100,24 @@ class DP3Step:
                     else:
                         self.__logger.debug(f"Path {path} is a recognized file type.")
 
-                params[key] = str(path)
+                dp3_params[key] = str(path)
 
             elif isinstance(val, OutputS3):
-                self.__logger.info(f"Preparing output path for key {key} using {val}")
-                local_directory_path = s3_to_local_path(val, base_local_dir=working_dir)
-                os.makedirs(local_directory_path.parent, exist_ok=True)
-                final_output_path = local_directory_path
-                self.__logger.debug(f"Output path prepared: {final_output_path}")
-                directories[final_output_path] = val
-                params[key] = str(final_output_path)
+                self.__logger.info(
+                    f"Preparing output path for key {key} using {val.get_local_path()}"
+                )
+                print(f"Creating directory: {val.get_local_path().parent}")
+                os.makedirs(val.get_local_path().parent, exist_ok=True)
+                dp3_params[key] = str(val.get_local_path())
 
-        self.__logger.debug(f"Final params for DP3 command: {params}")
-        params_path = dict_to_parset(params)
+        print(f"Params: {dp3_params}")
+
+        self.__logger.debug(f"Final params for DP3 command: {dp3_params}")
+        params_path = dict_to_parset(dp3_params)
         cmd = ["DP3", str(params_path)]
         self.__logger.debug(f"Executing DP3 command with parameters: {cmd}")
-        log_output = params["log_output"]
-
+        log_output = dp3_params["log_output"]
+        dp3_params.pop("log_output")
         stdout, stderr = time_it(
             "Execute DP3 command",
             self.run_command,
@@ -128,57 +131,65 @@ class DP3Step:
         self.__logger.info(f"DP3 execution stdout: {stdout if stdout else 'No Output'}")
         self.__logger.info(f"DP3 execution stderr: {stderr if stderr else 'No Errors'}")
 
-        for key, val in directories.items():
-            if os.path.exists(key):
-                self.__logger.debug(f"Path exists, proceeding to process: {key}")
+        print("Starting post processing")
+        print(params)
+        for key, remote_path in params.items():
+            print(f"key: {key}, val: {remote_path}")
+            if isinstance(remote_path, OutputS3):
                 try:
-                    if os.path.isdir(key):
+                    local_path = remote_path.get_local_path()
+                    print(f"Local path: {local_path}")
+                    if os.path.isdir(local_path):
                         self.__logger.debug(f"Zipping directory: {key}")
-                        zip_path = time_it(
+
+                        local_path = time_it(
                             "Zip without compression",
                             data_source.zip_without_compression,
                             Type.WRITE,
                             time_records,
-                            key,
+                            local_path,
                         )
-                        if val.remote_ow:
-                            s3_path = PosixPath(
-                                str.replace(str(zip_path), val.key, val.remote_ow)
-                            )
-                            s3_path = local_path_to_s3(s3_path)
-                        else:
-                            s3_path = local_path_to_s3(zip_path)
 
-                        print(f"Uploading zip file to S3: {s3_path}")
-                        time_it(
-                            "Upload file",
-                            data_source.upload_file,
-                            Type.WRITE,
-                            time_records,
-                            zip_path,
-                            s3_path,
-                        )
-                    elif os.path.isfile(key):
-                        self.__logger.debug(f"Uploading file: {key}")
-                        if val.remote_ow:
-                            s3_path = PosixPath(
-                                str.replace(str(key), val.key, val.remote_ow)
-                            )
-                            s3_path = local_path_to_s3(s3_path)
-                        else:
-                            s3_path = local_path_to_s3(key)
+                        print(f"Zipped directory: {local_path}")
 
-                        print(f"Uploading file to S3: {s3_path}")
-                        time_it(
-                            "Upload file",
-                            data_source.upload_file,
-                            Type.WRITE,
-                            time_records,
-                            key,
-                            s3_path,
+                    if remote_path.remote_ow:
+                        print("remote_overwrite_path")
+                        print(remote_path)
+                        print(local_path)
+
+                        # Extract remote_ow key from remote_path
+                        remote_ow_key = remote_path.remote_ow
+
+                        # Extract the file name from the local_path
+                        file_name = os.path.basename(local_path)
+
+                        new_local_path_str = f"{local_path.base_local_path}/{local_path.bucket}/{remote_ow_key}/{file_name}"
+
+                        new_local_path = LocalPath(
+                            local_path.base_local_path,
+                            local_path.bucket,
+                            new_local_path_str.replace(
+                                f"{local_path.base_local_path}/{local_path.bucket}/", ""
+                            ),
+                            local_path.file_ext,
                         )
+
+                        s3_path = local_path_to_s3(new_local_path)
+                        print(f"remote overwrite path: {s3_path}")
                     else:
-                        self.__logger.error(f"{key} is neither a file nor a directory.")
+                        s3_path = local_path_to_s3(local_path)
+                        print(f"normal_path: {s3_path}")
+
+                    print(f"Uploading zip file to S3: {s3_path}")
+                    time_it(
+                        "Upload file",
+                        data_source.upload,
+                        Type.WRITE,
+                        time_records,
+                        local_path,
+                        s3_path,
+                    )
+
                 except IsADirectoryError as e:
                     self.__logger.error(f"Error while zipping: {e}")
 
@@ -191,6 +202,7 @@ class DP3Step:
         self.__logger = setup_logging(self.__log_level)
         memory_limit = get_memory_limit_cgroupv2()
         cpu_limit = get_cpu_limit_cgroupv2()
+        print(parameter_list)
         msin = parameter_list[0]["msin"]
         chunk_size = round(
             int(lithops.Storage().head_object(msin.bucket, msin.key)["content-length"])
@@ -201,7 +213,7 @@ class DP3Step:
         self.__logger.info(f"Memory Limit: {memory_limit} GB")
         self.__logger.info(f"CPU Limit: {cpu_limit}")
         self.__logger.info(f"Worker {id} executing step")
-        self.__logger.info(f"parameter list: {parameter_list}")
+        # self.__logger.info(f"parameter list: {parameter_list}")
 
         with profiling_context(os.getpid()) as profiler:
             function_timers = []
@@ -240,6 +252,7 @@ class DP3Step:
                 new_params[k] = OutputS3(
                     bucket=v.bucket,
                     key=new_key_path,
+                    remote_key_ow=v.remote_ow,
                 )
                 self.__logger.info(f"New output path: {new_key_path}")
             elif isinstance(v, InputS3) and v.dynamic:
@@ -258,8 +271,8 @@ class DP3Step:
         return stdout, stderr
 
     def run(self, func_limit: Optional[int] = None, step_name: Optional[str] = None):
-        runtime_memory = 2048
-        cpus_per_worker = 2
+        runtime_memory = 4096
+        cpus_per_worker = 4
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
 
         lithops_fexec_parameters = {"log_level": self.__log_level}
