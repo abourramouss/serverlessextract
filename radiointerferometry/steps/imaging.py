@@ -39,23 +39,34 @@ class ImagingStep:
         time_records = []
         data_source = LithopsDataSource()
         params = pickle.loads(parameters)
-        for param in params:
-            # check -name parameter and do a s3_to_local_path
+
+        # Cleanup the output directory if it exists
+        for idx, param in enumerate(params):
             if param == "-name":
-                output_ms = params[params.index(param) + 1]
+                output_ms = params[idx + 1]
                 posix_source = s3_to_local_path(output_ms)
                 self._logger.debug(f"Posix source: {posix_source}")
-                params[params.index(param) + 1] = str(posix_source)
+
+                # Ensure the subpath is correctly appended
+                posix_source = posix_source / output_ms.file_name
+                output_dir = posix_source.parent
+                if output_dir.exists():
+                    self._logger.info(f"Cleaning up existing directory: {output_dir}")
+                    for file in output_dir.iterdir():
+                        file.unlink()
+                else:
+                    output_dir.mkdir(parents=True, exist_ok=True)
+
+                params[idx + 1] = str(posix_source)
                 break
 
         self._logger.info(f"modified params: {params}")
-        # Initialize an empty list to store partition paths
         partitions = []
         for partition in ms:
-            self._logger.info("Partition: {partition}")
+            self._logger.info(f"Partition: {partition}")
             partition_path = time_it(
                 "download_ms",
-                data_source.download_directory,
+                data_source.download,
                 Type.READ,
                 time_records,
                 partition,
@@ -64,31 +75,22 @@ class ImagingStep:
             partition_path = time_it(
                 "unzip", data_source.unzip, Type.READ, time_records, partition_path
             )
-
             partitions.append(str(partition_path))
 
-        cmd = [
-            "wsclean",
-        ]
-
+        cmd = ["wsclean"]
         cmd.extend(params)
-        # Append the paths of all partitions to the command
         cmd.extend(partitions)
 
         self._logger.info(f"cmd: {cmd}")
         proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-
         stdout, stderr = proc.communicate()
-
         self._logger.info("stdout:")
         self._logger.info(stdout)
         self._logger.info("stderr:")
         self._logger.info(stderr)
 
         directory_path = os.path.dirname(posix_source)
-
         files_in_directory = os.listdir(directory_path)
-
         image = PosixPath(
             next(
                 (
@@ -99,36 +101,23 @@ class ImagingStep:
                 None,
             )
         )
-
         self._logger.debug(f"image_dir: {image}")
-
-        data_source.upload_file(
-            image,
-            local_path_to_s3(image),
-        )
-
+        data_source.upload(image, local_path_to_s3(image))
         return time_records
 
     def _execute_step(self, id, *args, **kwargs):
         ms = kwargs["kwargs"]["ms"]
         parameters = kwargs["kwargs"]["parameters"]
-
         self._logger.info(f"Worker executing step with {len(ms)} ms paths")
-
         with profiling_context(os.getpid()) as profiler:
             function_timers = self.execute_step(ms, parameters)
-
         profiler.function_timers = function_timers
         profiler.worker_id = id
-
         env, instance_type = detect_runtime_environment()
         self._logger.info(f"Worker finished step on {env} instance {instance_type}")
         return {"profiler": profiler, "env": env, "instance_type": instance_type}
 
-    def run(
-        self,
-    ):
-        # Parameters to optimize
+    def run(self):
         runtime_memory = 8000
         cpus_per_worker = 10
         extra_env = {"HOME": "/tmp", "OPENBLAS_NUM_THREADS": "1"}
@@ -137,23 +126,18 @@ class ImagingStep:
             runtime_cpu=cpus_per_worker,
             log_level=self._log_level,
         )
-
         keys = lithops.Storage().list_keys(
             bucket=self._input_data_path.bucket,
             prefix=f"{self._input_data_path.key}/",
         )
-
         if f"{self._input_data_path.key}/" in keys:
             keys.remove(f"{self.input_data_path.key}/")
         ms = [
             S3Path.from_bucket_key(bucket=self._input_data_path.bucket, key=partition)
             for partition in keys
         ]
-
         self._parameters.extend(["-j", str(cpus_per_worker)])
         parameters = pickle.dumps(self._parameters)
-        # append the number of cpus to parameters
-
         start_time = time.time()
         future = function_executor.call_async(
             func=self._execute_step,
@@ -166,13 +150,9 @@ class ImagingStep:
             },
             extra_env=extra_env,
         )
-
         self._logger.info(f"parameters: {self._parameters}")
-
         result = function_executor.get_result([future])
-
         end_time = time.time()
-
         try:
             env = result["env"]
             instance_type = result["instance_type"]
@@ -181,24 +161,19 @@ class ImagingStep:
             self._logger.error(
                 f"KeyError: {e}. The expected key is not in the result dictionary."
             )
-
         profiler.worker_start_tstamp = future.stats["worker_start_tstamp"]
         profiler.worker_end_tstamp = future.stats["worker_end_tstamp"]
 
-        """
-        
-        
-        completed_step = CompletedStep(
-            memory=runtime_memory,
-            cpus_per_worker=cpus_per_worker,
-            chunk_size=chunk_size,
-            start_time=start_time,
-            end_time=end_time,
-            number_workers=1,
-            profilers=[profiler],
-            instance_type=instance_type,
-            environment=env,
-        )
+        # completed_step = CompletedStep(
+        #     memory=runtime_memory,
+        #     cpus_per_worker=cpus_per_worker,
+        #     chunk_size=chunk_size,
+        #     start_time=start_time,
+        #     end_time=end_time,
+        #     number_workers=1,
+        #     profilers=[profiler],
+        #     instance_type=instance_type,
+        #     environment=env,
+        # )
 
-        return completed_step
-        """
+        # return completed_step
