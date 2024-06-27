@@ -82,6 +82,44 @@ class InputS3(S3PathBase):
         )
 
 
+class LocalPath:
+    def __init__(self, base_local_path, bucket, key, file_ext=None, remote_key_ow=None):
+        print(
+            f"Initializing LocalPath with {base_local_path}, {bucket}, {key}, {file_ext}, {remote_key_ow}"
+        )
+        self.base_local_path = base_local_path
+        self.bucket = bucket
+        self.key = key
+        self.file_ext = file_ext
+        self.remote_key_ow = remote_key_ow
+        self.path = Path(
+            f"{self.base_local_path}/{self.bucket}/{self.key}{('.' + self.file_ext if self.file_ext else '')}"
+        )
+
+    def __str__(self):
+        return str(self.path)
+
+    def __fspath__(self):
+        return str(self.path)
+
+    def __getattr__(self, name):
+        return getattr(self.path, name)
+
+    @property
+    def parent(self):
+        return self.path.parent
+
+    def get_remote_path(self):
+        return OutputS3(
+            bucket=self.bucket,
+            key=self.key,
+            file_ext=self.file_ext,
+            file_name=self.path.name,
+            remote_key_ow=self.remote_key_ow,
+            base_local_path=self.base_local_path,
+        )
+
+
 class OutputS3(S3PathBase):
     def __init__(
         self,
@@ -105,6 +143,9 @@ class OutputS3(S3PathBase):
         return self._file_name
 
     def get_local_path(self):
+        print(
+            f"Getting local path for OutputS3: {self._base_local_path}, {self._bucket}, {self._key}, {self._file_ext}, {self.remote_ow}"
+        )
         return LocalPath(
             self._base_local_path,
             self._bucket,
@@ -115,42 +156,6 @@ class OutputS3(S3PathBase):
 
     def __repr__(self):
         return f"OutputS3(bucket={self._bucket}, key={self._key}, file_ext={self._file_ext}, file_name={self._file_name}, remote_key_ow={self.remote_ow}, base_local_path={self._base_local_path})"
-
-
-class LocalPath(Path):
-    _flavour = type(Path())._flavour
-
-    def __new__(cls, base_local_path, bucket, key, file_ext=None, remote_key_ow=None):
-        path_str = (
-            f"{base_local_path}/{bucket}/{key}{('.' + file_ext if file_ext else '')}"
-        )
-        obj = super().__new__(cls, path_str)
-        obj._init(base_local_path, bucket, key, file_ext, remote_key_ow)
-        return obj
-
-    def _init(self, base_local_path, bucket, key, file_ext, remote_key_ow):
-        self.base_local_path = base_local_path
-        self.bucket = bucket
-        self.key = key
-        self.file_ext = file_ext
-        self.remote_key_ow = remote_key_ow
-
-    def __str__(self):
-        return f"{self.base_local_path}/{self.bucket}/{self.key}{('.' + self.file_ext if self.file_ext else '')}"
-
-    @property
-    def parent(self):
-        return Path(f"{self.base_local_path}/{self.bucket}/{self.key}").parent
-
-    def get_remote_path(self):
-        return OutputS3(
-            bucket=self.bucket,
-            key=self.key,
-            file_ext=self.file_ext,
-            file_name=self.name,
-            remote_key_ow=self.remote_key_ow,
-            base_local_path=self.base_local_path,
-        )
 
 
 # Four operations: download file, download directory, upload file, upload directory (Multipart) to interact with pipeline files
