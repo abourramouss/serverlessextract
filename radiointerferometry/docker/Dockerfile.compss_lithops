@@ -1,10 +1,18 @@
 # syntax=docker/dockerfile:1.0.0-experimental
 FROM oriolmac/compss-extract:3.3-amd
 
-# Install dependencies or any required tools here
-RUN pip install lithops==3.4.1
+# Copy the entire serverlessextract directory
+COPY serverlessextract /serverlessextract
 
-# Using secrets to handle sensitive files
-RUN --mount=type=secret,id=kubeconfig,dst=/root/.kube/config \
-    --mount=type=secret,id=lithopsconfig,dst=/root/.lithops/config \
-    echo "Secrets are being used but not left in the image"
+# Use build secrets to handle sensitive files and install dependencies
+RUN --mount=type=secret,id=kubeconfig,dst=/tmp/.kube/config \
+    --mount=type=secret,id=lithopsconfig,dst=/tmp/.lithops/config \
+    mkdir -p /root/.kube /root/.lithops && \
+    cp /tmp/.kube/config /root/.kube/config && \
+    cp /tmp/.lithops/config /root/.lithops/config && \
+    cd /serverlessextract && \
+    python3 -m pip install -r requirements.txt && \
+    python3 -m pip install kubernetes && \
+    python3 -m pip install .
+
+WORKDIR /serverlessextract
