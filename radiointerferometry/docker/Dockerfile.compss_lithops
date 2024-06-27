@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1.0.0-experimental
+FROM oriolmac/compss-extract:3.3-amd
+
+# Install dependencies or any required tools here
+RUN pip install lithops==3.4.1
+
+# Using secrets to handle sensitive files
+RUN --mount=type=secret,id=kubeconfig,dst=/root/.kube/config \
+    --mount=type=secret,id=lithopsconfig,dst=/root/.lithops/config \
+    echo "Secrets are being used but not left in the image"
