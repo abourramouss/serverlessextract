@@ -6,7 +6,8 @@ from radiointerferometry.steps.imaging import ImagingStep
 from radiointerferometry.steps.pipelinestep import DP3Step
 from radiointerferometry.datasource import InputS3, OutputS3
 from radiointerferometry.partitioning import StaticPartitioner
-
+from pycompss.api.task import task
+from pycompss.api.api import compss_barrier
 
 # Logger setup
 LOG_LEVEL = logging.INFO
@@ -64,16 +65,6 @@ CAL_rebinning_params = {
 }
 
 
-# CALIBRATOR REBINNING
-start_time = time.time()
-finished_job = DP3Step(parameters=CAL_rebinning_params, log_level=LOG_LEVEL).run(
-    func_limit=1
-)
-
-end_time = time.time()
-logger.info(f"CAL Rebinning completed in {end_time - start_time} seconds.")
-
-
 CAL_calibration_params = {
     "msin": InputS3(
         bucket=BUCKET,
@@ -106,16 +97,6 @@ CAL_calibration_params = {
     ),
 }
 
-# CALIBRATOR CALIBRATION
-start_time = time.time()
-
-finished_job = DP3Step(parameters=CAL_calibration_params, log_level=LOG_LEVEL).run(
-    func_limit=1
-)
-
-end_time = time.time()
-logger.info(f"CAL Calibration completed in {end_time - start_time} seconds.")
-
 
 inputs_tar = InputS3(
     bucket=BUCKET, key="CYGLOOP2024/20240312_084100_20240312_100000_CYGLOOP_TARGET/"
@@ -147,15 +128,6 @@ TARGET_rebinning_params = {
     ),
 }
 
-# TARGET REBINNING
-start_time = time.time()
-finished_job = DP3Step(parameters=TARGET_rebinning_params, log_level=LOG_LEVEL).run(
-    func_limit=1
-)
-
-end_time = time.time()
-logger.info(f"TARGET Rebinning completed in {end_time - start_time} seconds.")
-
 
 TARGET_apply_calibration = {
     "msin": InputS3(bucket=BUCKET, key=prepend_hash_to_key("TAR/rebinning_out/ms")),
@@ -185,16 +157,6 @@ TARGET_apply_calibration = {
         file_ext="log",
     ),
 }
-
-
-# TARGET CALIBRATION (APPLY)
-start_time = time.time()
-finished_job = DP3Step(parameters=TARGET_apply_calibration, log_level=LOG_LEVEL).run(
-    func_limit=1
-)
-
-end_time = time.time()
-logger.info(f"target Calibration completed in {end_time - start_time} seconds.")
 
 
 TARGET_imaging_params = [
@@ -231,14 +193,82 @@ TARGET_imaging_params = [
         bucket=BUCKET, key=prepend_hash_to_key("TAR/imag_out/"), file_name="image"
     ),
 ]
-# TARGET IMAGING
-start_time = time.time()
-finished_job = ImagingStep(
-    input_data_path=InputS3(
-        bucket=BUCKET, key=prepend_hash_to_key("TAR/applycal_out/ms")
-    ),
-    parameters=TARGET_imaging_params,
-    log_level=LOG_LEVEL,
-).run()
-end_time = time.time()
-logger.info(f"TARGET Imaging completed in {end_time - start_time} seconds.")
+
+
+@task(returns=int)
+def CAL_rebinning():
+    # CALIBRATOR REBINNING
+    start_time = time.time()
+    finished_job = DP3Step(parameters=CAL_rebinning_params, log_level=LOG_LEVEL).run(
+        func_limit=1
+    )
+
+    end_time = time.time()
+    logger.info(f"CAL Rebinning completed in {end_time - start_time} seconds.")
+    return 1
+
+
+@task(returns=int)
+def CAL_calibration(cal_rebinning_output):
+    # CALIBRATOR CALIBRATION
+    start_time = time.time()
+
+    finished_job = DP3Step(parameters=CAL_calibration_params, log_level=LOG_LEVEL).run(
+        func_limit=1
+    )
+
+    end_time = time.time()
+    logger.info(f"CAL Calibration completed in {end_time - start_time} seconds.")
+    return 1
+
+
+@task(returns=int)
+def TARGET_rebinning():
+    # TARGET REBINNING
+    start_time = time.time()
+    finished_job = DP3Step(parameters=TARGET_rebinning_params, log_level=LOG_LEVEL).run(
+        func_limit=1
+    )
+
+    end_time = time.time()
+    logger.info(f"TARGET Rebinning completed in {end_time - start_time} seconds.")
+    return 1
+
+
+@task(returns=int)
+def TARGET_calibration(target_rebinning_output):
+    # TARGET CALIBRATION (APPLY)
+    start_time = time.time()
+    finished_job = DP3Step(
+        parameters=TARGET_apply_calibration, log_level=LOG_LEVEL
+    ).run(func_limit=1)
+
+    end_time = time.time()
+    logger.info(f"target Calibration completed in {end_time - start_time} seconds.")
+    return 1
+
+
+@task(returns=int)
+def TARGET_imaging(target_calibration_output):
+    # TARGET IMAGING
+    start_time = time.time()
+    finished_job = ImagingStep(
+        input_data_path=InputS3(
+            bucket=BUCKET, key=prepend_hash_to_key("TAR/applycal_out/ms")
+        ),
+        parameters=TARGET_imaging_params,
+        log_level=LOG_LEVEL,
+    ).run()
+    end_time = time.time()
+    logger.info(f"TARGET Imaging completed in {end_time - start_time} seconds.")
+    return 1
+
+
+if __name__ == "__main__":
+
+    # Orchestrate step execution
+    rebinning_output = CAL_rebinning()
+    calibration_output = CAL_calibration(rebinning_output)
+    rebinning_output = TARGET_rebinning()
+    calibration_output = TARGET_calibration(rebinning_output)
+    imaging_output = TARGET_imaging(calibration_output)
