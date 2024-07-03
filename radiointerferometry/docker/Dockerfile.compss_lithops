@@ -2,7 +2,7 @@
 FROM oriolmac/compss-extract:3.3-amd
 
 # Copy the entire serverlessextract directory
-COPY serverlessextract /serverlessextract
+COPY taskac /taskac
 
 # Use build secrets to handle sensitive files and install dependencies
 RUN --mount=type=secret,id=kubeconfig,dst=/tmp/.kube/config \
@@ -10,9 +10,7 @@ RUN --mount=type=secret,id=kubeconfig,dst=/tmp/.kube/config \
     mkdir -p /root/.kube /root/.lithops && \
     cp /tmp/.kube/config /root/.kube/config && \
     cp /tmp/.lithops/config /root/.lithops/config && \
-    cd /serverlessextract && \
+    cd /taskac && \
     python3 -m pip install -r requirements.txt && \
     python3 -m pip install kubernetes && \
     python3 -m pip install .
-
-WORKDIR /serverlessextract

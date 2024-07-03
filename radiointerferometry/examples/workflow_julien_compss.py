@@ -236,7 +236,7 @@ def TARGET_rebinning():
 
 
 @task(returns=int)
-def TARGET_calibration(target_rebinning_output):
+def TARGET_calibration(target_rebinning_output, calibrator_calibration_output):
     # TARGET CALIBRATION (APPLY)
     start_time = time.time()
     finished_job = DP3Step(
@@ -265,10 +265,12 @@ def TARGET_imaging(target_calibration_output):
 
 
 if __name__ == "__main__":
-
+    print("Starting workflow")
     # Orchestrate step execution
-    rebinning_output = CAL_rebinning()
-    calibration_output = CAL_calibration(rebinning_output)
-    rebinning_output = TARGET_rebinning()
-    calibration_output = TARGET_calibration(rebinning_output)
-    imaging_output = TARGET_imaging(calibration_output)
+    calibrator_rebinning_output = CAL_rebinning()
+    calibrator_calibration_output = CAL_calibration(calibrator_rebinning_output)
+    target_rebinning_output = TARGET_rebinning()
+    target_calibration_output = TARGET_calibration(
+        target_rebinning_output, calibrator_calibration_output
+    )
+    target_imaging_output = TARGET_imaging(target_calibration_output)
